@@ -146,14 +146,18 @@ You can use interactive mode by enter command `mma` without any arguments in sol
 
 ### UI
 
-Also you can use UI mode to create and manage your solutions.
+	Also you can use UI mode to create and manage your solutions. Select `UI` from `Interactive` or execute `mma ui`
 
-![image](https://i.imgur.com/0HnJstp.png)
+	```bash
+	mma ui
+	```
 
-![image](https://i.imgur.com/mkQKfvc.png)
+	![image](https://i.imgur.com/0HnJstp.png)
 
-![image](https://i.imgur.com/C28low8.png)
+	![image](https://i.imgur.com/mkQKfvc.png)
 
-![image](https://i.imgur.com/VBrwxCR.png)
+	![image](https://i.imgur.com/C28low8.png)
 
-![image](https://i.imgur.com/7mJBqy1.png)
+	![image](https://i.imgur.com/VBrwxCR.png)
+
+	![image](https://i.imgur.com/7mJBqy1.png)
