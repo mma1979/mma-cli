@@ -2,7 +2,7 @@
 
 ![build and test](https://img.shields.io/github/actions/workflow/status/abpframework/abp/build-and-test.yml?branch=dev&style=flat-square)
 [![NuGet](https://img.shields.io/badge/nugett-v3.1.3-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
-[![NuGet (with prereleases)](https://img.shields.io/badge/nugett-v4.0.0%20rc.6-yellow?style=flat-square)](https://www.nuget.org/packages/mma-cli/4.0.0-rc.6)
+[![NuGet (with prereleases)](https://img.shields.io/badge/nugett-v4.0.0%20rc.7-yellow?style=flat-square)](https://www.nuget.org/packages/mma-cli/4.0.0-rc.7)
 
 ```
 .___  ___. .___  ___.      ___      
@@ -29,7 +29,7 @@ MMA Cli is a complete **Code Generator** based on **ASP.NET Core** to create **m
 Install the `mma-cli`:
 
 ````bash
-dotnet tool install --global mma-cli --version 4.0.0-rc.6
+dotnet tool install --global mma-cli --version 4.0.0-rc.7
 ````
 
 Create a new Solution:
