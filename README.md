@@ -1,7 +1,7 @@
 # MMA CLI
 
 ![build and test](https://img.shields.io/github/actions/workflow/status/abpframework/abp/build-and-test.yml?branch=dev&style=flat-square)
-[![NuGet](https://img.shields.io/badge/nugett-v4.0.0-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
+[![NuGet](https://img.shields.io/badge/nugett-v4.0.1-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
 
 
 ```
@@ -29,7 +29,7 @@ MMA Cli is a complete **Code Generator** based on **ASP.NET Core** to create **m
 Install the `mma-cli`:
 
 ````bash
-dotnet tool install --global mma-cli --version 4.0.0
+dotnet tool install --global mma-cli
 ````
 
 Create a new Solution:
@@ -147,6 +147,7 @@ You can use interactive mode by enter command `mma` without any arguments in sol
 
 Also you can use UI mode to create and manage your solutions. Select `UI` from `Interactive` or execute `mma ui`
 
+> Thanks to [Radzen](https://blazor.radzen.com/)
 
 ````bash
 mma ui
