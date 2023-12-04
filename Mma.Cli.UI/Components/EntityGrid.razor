@@ -1,0 +1,196 @@
+﻿@inject CliDbContext ctx
+
+<RadzenDataGrid AllowFiltering="false" FilterPopupRenderMode="PopupRenderMode.OnDemand"
+                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" AllowPaging="false"
+                AllowSorting="false" Data="@Rows" TItem="EntityRowModel"
+                SelectionMode="DataGridSelectionMode.Single" @bind-Value="@SelectedRows"
+                @ref="Grid" Style="width:90%" >
+    <HeaderTemplate>
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10" JustifyContent="JustifyContent.SpaceBetween">
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10" JustifyContent="JustifyContent.Left" Style="float:left">
+                    <RadzenButton ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small"
+                                  Icon="remove_circle_outline"
+                                  Click="@InsertRow" Disabled="Applied"/>
+                    <RadzenLabel Text="@EntityName"/>
+                    <RadzenBadge Text="@PkType" BadgeStyle="BadgeStyle.Danger"
+                                 Shade="Shade.Lighter"/>
+                </RadzenStack>
+
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10" JustifyContent="JustifyContent.End" Style="float: right">
+                    <RadzenButton ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
+                                  Icon="add_circle_outline"
+                                  Text="Add" Click="@InsertRow" Disabled="@(RowToInsert != null)"/>
+                    <span>&nbsp;</span>
+                </RadzenStack>
+
+            </RadzenStack>
+    </HeaderTemplate>
+    <Columns>
+        <RadzenDataGridColumn TItem="EntityRowModel" Property="ColumnName" Title="Column Name" Width="40%">
+            <EditTemplate Context="row">
+                <RadzenTextBox @bind-Value="row.ColumnName" Style="width: 100%"/>
+            </EditTemplate>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="EntityRowModel" Property="DataType" Title="Data Type" Width="30%">
+            <EditTemplate Context="row">
+                <RadzenDropDown @bind-Value="row.DataType" Data="@DataTypes"
+                                Style="width:100%; display: block;"
+                                AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"/>
+            </EditTemplate>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="EntityRowModel" Property="Nullable" Title="Nullable?" Width="10%">
+            <Template Context="row">
+                <RadzenCheckBox @bind-Value="row.Nullable" Disabled="true"></RadzenCheckBox>
+            </Template>
+            <EditTemplate Context="row">
+                <RadzenCheckBox @bind-Value="row.Nullable"></RadzenCheckBox>
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="EntityRowModel" Context="row" Filterable="false" Sortable="false"
+                              TextAlign="TextAlign.Right" Width="20%">
+            <Template Context="row">
+
+                <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat"
+                              Shade="Shade.Lighter" Size="ButtonSize.Medium" class="my-1 ms-1"
+                              Click="@(args => DeleteRow(row))" @onclick:stopPropagation="true">
+                </RadzenButton>
+            </Template>
+            <EditTemplate Context="row">
+                <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Variant="Variant.Flat"
+                              Size="ButtonSize.Medium" Click="@((args) => SaveRow(row))">
+                </RadzenButton>
+                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                              Size="ButtonSize.Medium" class="my-1 ms-1" Click="@((args) => CancelEdit(row))">
+                </RadzenButton>
+                @* <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat"  *@
+                @*               Shade="Shade.Lighter" Size="ButtonSize.Medium" class="my-1 ms-1" Click="@(args => DeleteRow(row))"> *@
+                @* </RadzenButton> *@
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+
+    [Parameter]
+    public ProjectModel Project { get; set; }
+
+    [Parameter]
+    public string EntityName { get; set; } = "Table1";
+
+    [Parameter]
+    public string PkType { get; set; } = "Guid";
+
+    [Parameter]
+    public bool HasApi { get; set; } = true;
+
+    [Parameter]
+    public bool Applied { get; set; } = false;
+
+    [Parameter]
+    public List<EntityRowModel> Rows { get; set; } = new();
+
+    IList<EntityRowModel>? SelectedRows;
+
+    RadzenDataGrid<EntityRowModel>? Grid;
+
+    EntityRowModel? RowToInsert;
+
+    List<string> DataTypes = new()
+    {
+        "Guid",
+        "int",
+        "long",
+        "decimal",
+        "floot",
+        "string",
+        "bool",
+        "DateTime"
+    };
+
+    void Reset()
+    {
+        RowToInsert = null;
+    }
+
+    async Task InsertRow()
+    {
+        RowToInsert = new();
+        await Grid.InsertRow(RowToInsert);
+    }
+
+    void CancelEdit(EntityRowModel row)
+    {
+        Reset();
+        Grid.CancelEditRow(row);
+    }
+
+    async Task DeleteRow(EntityRowModel row)
+    {
+        var entity = ctx.Entities
+            .FirstOrDefault(e => e.ProjectId == Project.Id && e.EntityName == EntityName);
+
+        var r = entity.Rows.First(r => r.ColumnName == row.ColumnName);
+        entity?.Rows.Remove(r);
+
+        if (r.Applied)
+        {
+            _ = await CliWrap.Cli.Wrap("mma")
+                .WithWorkingDirectory(Project.Path)
+                .WithArguments(args => args.Add("g").Add("p")
+                    .Add(entity.EntityName).Add(r.ColumnName)
+                    .Add(r.DataType).Add(r.Nullable ? "true" : "false")
+                    .Add("--remove"))
+                .ExecuteAsync();
+        }
+
+        await ctx.SaveChangesAsync();
+        
+        
+        Reset();
+
+        if (Rows.Contains(row))
+        {
+            Rows.Remove(row);
+            await Grid.Reload();
+        }
+        else
+        {
+            Grid.CancelEditRow(row);
+            await Grid.Reload();
+        }
+    }
+
+    async Task SaveRow(EntityRowModel row)
+    {
+        var entity = ctx.Entities
+            .FirstOrDefault(e => e.ProjectId == Project.Id && e.EntityName == EntityName);
+
+        entity.Rows ??= new();
+        entity.Rows.Add(new()
+        {
+            ColumnName = row.ColumnName,
+            DataType = row.DataType,
+            Nullable = row.Nullable,
+            Applied = false
+        });
+
+        await ctx.SaveChangesAsync();
+
+        await Grid.UpdateRow(row);
+        Reset();
+    }
+
+
+}
+
+<style>
+    .rz-group-header{
+    padding: 10px !important;
+    }
+    .rz-custom-header{
+    width: 100% !important;
+    }
+</style>

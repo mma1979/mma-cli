@@ -1,0 +1,28 @@
+﻿@foreach (var entity in Entities)
+{
+    <div class="col-md-4 col-sm-12" style="display: inline-block;">
+        <EntityGrid Rows="@entity.Rows"
+                    EntityName="@entity.EntityName"
+                    PkType="@entity.PkType"
+                    Applied="@entity.Applied"
+                    Project="Project" />
+    </div>
+}
+
+@code {
+    [Parameter]
+    public ProjectModel Project { get; set; }
+
+    [Parameter]
+    public List<EntityModel> Entities { get; set; } = new();
+
+    [Parameter]
+    public List<RelationDto> Relations { get; set; } = new();
+    
+   
+
+
+    private string entityName { get; set; } = "Table1";
+    private string pkType { get; set; } = "Guid";
+    private bool hasApi { get; set; } = true;
+}

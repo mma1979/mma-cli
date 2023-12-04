@@ -1,0 +1,124 @@
+﻿@page "/"
+
+@inject NavigationManager NavigationManager
+@inject CliDbContext ctx
+
+<PageTitle>Index</PageTitle>
+
+<div class="row">
+    <div class="col-md-12" style="margin-bottom:20px; margin-top:5px;">
+        <RadzenHeader>
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10" JustifyContent="JustifyContent.SpaceBetween">
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10" JustifyContent="JustifyContent.Left">
+
+                    <RadzenButton Text="Solutions"
+                                  Style="margin-top: -5px; color: white;" Icon="home"
+                                  ButtonStyle="ButtonStyle.Primary"
+                                  Variant="Variant.Text"/>
+                </RadzenStack>
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10" JustifyContent="JustifyContent.End">
+                    <RadzenButton Text="Create Solution"
+                                  ButtonStyle="ButtonStyle.Success"
+                                  Icon="note_add"
+                                  Style="margin-top: 5px"
+                                  Click="() => CreateSolution()"/>
+
+                    <span>&nbsp;</span>
+
+                    <RadzenButton Text="Import Solution"
+                                  ButtonStyle="ButtonStyle.Secondary"
+                                  Icon="backup"
+                                  Style="margin-top: 5px"
+                                  Click="() => ImportSolution()"/>
+                    
+                    <span>&nbsp;</span>
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenHeader>
+
+    </div>
+
+    <div class="col-md-12">
+        <RadzenBody Expanded="true">
+
+            <RadzenDataList WrapItems="true" AllowPaging="false"
+                            Data="@Projects" TItem="ProjectModel"
+                            PagerHorizontalAlign="HorizontalAlign.Left"
+                            ShowPagingSummary="true">
+
+                <Template Context="project">
+                    <RadzenCard Style="width: 100%; padding: 0;">
+                        <RadzenRow Gap="0">
+                            <RadzenColumn Size="12" SizeMD="6" SizeLG="6" class="product-title">
+                                <RadzenText TextStyle="TextStyle.H6" TagName="TagName.H5" Class="rz-mb-0">Project Name</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Body2">@(project.Name)</RadzenText>
+                            </RadzenColumn>
+
+                            <RadzenColumn Size="12" SizeMD="6" SizeLG="6">
+                                <RadzenText TextStyle="TextStyle.H6" TagName="TagName.H5" Class="rz-mb-0">Project Path</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Body2">@(project.Path)</RadzenText>
+                            </RadzenColumn>
+
+                            <RadzenColumn Size="12" SizeLG="12" Class="rz-p-4">
+                                <RadzenButton Text="Select" Style="width: 100%"
+                                              Click="() => SelectProject(project)"/>
+                            </RadzenColumn>
+                        </RadzenRow>
+                    </RadzenCard>
+                </Template>
+
+            </RadzenDataList>
+
+        </RadzenBody>
+
+
+    </div>
+</div>
+
+@code {
+    public List<ProjectModel> Projects { get; set; } = new();
+
+    public async Task<List<ProjectModel>> Load()
+    {
+        var projects = await ctx.Projects.ToListAsync();
+
+        return projects.Any() ? projects : new();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Projects = await Load();
+    }
+
+    public void CreateSolution()
+    {
+        NavigationManager.NavigateTo("/new-solution");
+    }
+
+    public void ImportSolution()
+    {
+        NavigationManager.NavigateTo("/import-solution");
+    }
+
+    private void SelectProject(ProjectModel project)
+    {
+        NavigationManager.NavigateTo($"/solution-workspace/{project.Id}");
+    }
+
+}
+
+<style>
+    .product-title {
+        min-height: 72px;
+        background-color: lightgray;
+        border-right: double 1px black;
+        padding:10px;
+    }
+
+    .price-badge {
+        font-size: 16px;
+        font-weight: bold;
+        line-height: 20px;
+        padding: 8px;
+    }
+</style>

@@ -1,0 +1,20 @@
+{
+  "commands": {
+    "build": {
+      "fileName": "cmd.exe",
+      "workingDirectory": ".",
+      "arguments": "/c Mma.Cli.UI\\after-build.bat"
+    },
+    "after-build": {
+      "fileName": "cmd.exe",
+      "workingDirectory": ".",
+      "arguments": "/c Mma.Cli.UI\\after-build.bat"
+    }
+  }
+
+
+
+
+
+, "-vs-binding":{"AfterBuild":["after-build"]}
+}
