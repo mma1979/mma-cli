@@ -11,12 +11,23 @@
         <RadzenHeader>
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10">
 
-                <RadzenIcon Icon="note_add" Style="margin-top: -5px"/>
-                <RadzenLabel Text="Create Solution" Style="margin-top: -5px"/>
+                <RadzenButton Text="Solutions"
+                              Style="margin-top: -5px; color: white;" Icon="home"
+                              ButtonStyle="ButtonStyle.Primary"
+                              Variant="Variant.Text"
+                              Click='()=> NavigationManager.NavigateTo("/")' />
+
+               <RadzenButton Icon="eyboard_double_arrow_right" Style="margin-top: -5px;width: 55px;" Variant="Variant.Flat" />
+
+                <RadzenButton Text="@(IsImport? "Import Solution":"Create Solution")"
+                              Style="margin-top: -5px; color: white;" Icon="note_add"
+                              ButtonStyle="ButtonStyle.Primary"
+                              Variant="Variant.Text"/>
+
 
                 <span>&nbsp;</span>
 
-                <RadzenTextBox Style="margin-top: 5px; width:50%;"
+                <RadzenTextBox Style="margin-top: 5px; width:40%;"
                                Placeholder="Solution Path"
                                Value="@WorkingDirectory"/>
 
