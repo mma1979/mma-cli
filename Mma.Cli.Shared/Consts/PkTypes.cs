@@ -13,7 +13,7 @@ namespace Mma.Cli.Shared.Consts
         public const string LONG = "long";
         public const string STRING = "string";
         public const string DECIMAL = "decimal";
-        public const string FLOOT = "floot";
+        public const string FLOAT = "float";
         public const string BOOL = "bool";
         public const string DATE_TIME = "DateTime";
     }

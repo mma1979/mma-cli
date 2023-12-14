@@ -1,0 +1,106 @@
+﻿@inject DialogService DialogService
+
+<PageTitle>Import from Database </PageTitle>
+
+<RadzenColumn SizeMD=12>
+    <RadzenAlert Shade="Shade.Lighter" Variant="Variant.Flat" Size="AlertSize.Small" AlertStyle="AlertStyle.Danger" Visible="@errorVisible">Cannot connect the databse</RadzenAlert>
+    <RadzenStack>
+
+
+        <RadzenRadioButtonList @bind-Value="@isParameters" TValue="bool" class="mb-5">
+            <Items>
+                <RadzenRadioButtonListItem Text="Parameters" Value="true" />
+                <RadzenRadioButtonListItem Text="Connection String" Value="false" />
+            </Items>
+        </RadzenRadioButtonList>
+
+        <RadzenFormField Text="Connection String" Variant="Variant.Flat" Visible="!isParameters">
+            <ChildContent>
+                <RadzenTextArea @bind-Value="connectionString" Rows="3"  style="display: block; width: 100%" />
+            </ChildContent>
+        </RadzenFormField>
+
+        <RadzenFormField Text="Server" Variant="Variant.Flat" Visible="@isParameters">
+            <ChildContent>
+                <RadzenTextBox @bind-Value="server" style="display: block; width: 100%" />
+            </ChildContent>
+        </RadzenFormField>
+
+        <RadzenFormField Text="Authentication Type" Variant="Variant.Flat" Visible="@isParameters">
+            <ChildContent>
+                <RadzenDropDown @bind-Value=@authenticationType Data=@authenticationTypes Style="width: 100%; " />
+            </ChildContent>
+        </RadzenFormField>
+
+        @if (authenticationType == "SQL Login")
+        {
+            <RadzenFormField Text="User name" Variant="Variant.Flat" Visible="@isParameters">
+                <ChildContent>
+                    <RadzenTextBox @bind-Value="username" style="display: block; width: 100%" />
+                </ChildContent>
+            </RadzenFormField>
+
+            <RadzenFormField Text="Password" Variant="Variant.Flat" Visible="@isParameters">
+                <ChildContent>
+                    <RadzenPassword @bind-Value="password" style="display: block; width: 100%" />
+                </ChildContent>
+            </RadzenFormField>
+        }
+
+        <RadzenFormField Text="Database" Variant="Variant.Flat" Visible="@isParameters">
+            <ChildContent>
+                <RadzenTextBox @bind-Value="database" style="display: block; width: 100%" />
+            </ChildContent>
+        </RadzenFormField>
+
+    </RadzenStack>
+    <RadzenStack style="margin-top:1rem;" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton ButtonStyle="ButtonStyle.Primary" Icon="power_settings_new" Text="Connect" Variant="Variant.Flat" Click="@ConnectButtonClick" />
+        <RadzenButton ButtonStyle="ButtonStyle.Light" Text="Cancel" Variant="Variant.Flat" Click="@CancelButtonClick" />
+    </RadzenStack>
+</RadzenColumn>
+
+@code {
+    protected bool errorVisible;
+    protected bool isParameters = true;
+    protected string server = "";
+    protected string username = "";
+    protected string password = "";
+    protected string database = "";
+    protected string authenticationType = "Windows Authentication";
+    protected string connectionString = "";
+    protected List<string> authenticationTypes = new(){
+        "SQL Login",
+        "Windows Authentication",
+    };
+
+
+
+    protected async Task ConnectButtonClick(MouseEventArgs args)
+    {
+        if (isParameters)
+        {
+            SqlConnectionStringBuilder builder = new();
+            builder.DataSource = server;
+            builder.Authentication = authenticationType == "Windows Authentication" ?
+            SqlAuthenticationMethod.ActiveDirectoryIntegrated : SqlAuthenticationMethod.SqlPassword;
+            builder.TrustServerCertificate = true;
+            if (authenticationType == "SQL Login")
+            {
+                builder.UserID = username;
+                builder.Password = password;
+            }
+            builder.InitialCatalog = database;
+
+            connectionString = builder.ConnectionString;
+        }
+
+        if (!string.IsNullOrEmpty(connectionString))
+            DialogService.Close(connectionString);
+    }
+
+    protected async Task CancelButtonClick(MouseEventArgs args)
+    {
+        DialogService.Close(null);
+    }
+}

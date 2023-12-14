@@ -3,8 +3,10 @@
 
 @inject CliDbContext ctx
 @inject NavigationManager NavigationManager
+@inject CliData CliData
 
 @inject DialogService DialogService
+@inject NotificationService NotificationService
 
 <div class="row">
     <div class="col-md-12" style="margin-bottom:20px; margin-top:5px;">
@@ -16,13 +18,13 @@
                                   Style="margin-top: -5px; color: white;" Icon="home"
                                   ButtonStyle="ButtonStyle.Primary"
                                   Variant="Variant.Text"
-                                  Click="BackToHome"/>
+                                  Click="BackToHome" />
 
                     @* <RadzenIcon Icon="keyboard_double_arrow_right" Style="margin-top: -5px"/> *@
 
-                    <RadzenButton Icon="eyboard_double_arrow_right" Style="margin-top: -5px;width: 55px;" Variant="Variant.Flat"/>
+                    <RadzenButton Icon="eyboard_double_arrow_right" Style="margin-top: -5px;width: 55px;" Variant="Variant.Flat" />
                     <RadzenLabel Text="@Project?.Name"
-                                 Style="padding: 0.5rem 1rem;"/>
+                                 Style="padding: 0.5rem 1rem;" />
                 </RadzenStack>
 
                 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10" JustifyContent="JustifyContent.End">
@@ -30,7 +32,7 @@
                                   Style="margin-top: 5px"
                                   ButtonStyle="ButtonStyle.Success"
                                   Text="Add Entity"
-                                  Click="ShowAddTable"/>
+                                  Click="ShowAddTable" />
 
                     <span>&nbsp;</span>
 
@@ -38,14 +40,23 @@
                                   Style="margin-top: 5px"
                                   ButtonStyle="ButtonStyle.Warning"
                                   Text="Relations"
-                                  Click="ManageRelations"/>
+                                  Click="ManageRelations" />
                     <span>&nbsp;</span>
+
+
+                    <RadzenButton Icon="drive_folder_upload"
+                                  Style="margin-top: 5px"
+                                  ButtonStyle="ButtonStyle.Info"
+                                  Text="Import from Database"
+                                  Click="ImportDatabase" />
+                    <span>&nbsp;</span>
+
 
                     <RadzenButton Icon="publish"
                                   Style="margin-top: 5px"
                                   ButtonStyle="ButtonStyle.Danger"
                                   Text="Migrate & Apply"
-                                  Click="MigrateAndApply"/>
+                                  Click="MigrateAndApply" />
                     <span>&nbsp;</span>
                 </RadzenStack>
 
@@ -59,10 +70,10 @@
             <div class="col-md-12">
                 <ProjectWorkspace Project="Project"
                                   Entities="Entities"
-                                  Relations="Relations"/>
+                                  Relations="Relations" />
             </div>
 
-            <RadzenDialog/>
+            <RadzenDialog />
             <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Large" Visible="false">
                 <Template>Wait</Template>
             </RadzenProgressBarCircular>
@@ -72,14 +83,16 @@
     </div>
 </div>
 
-@code{
+<RadzenNotification />
+
+@code {
 
     [Parameter]
     public int ProjectId { get; set; }
 
     public ProjectModel? Project { get; set; }
 
-    protected List<EntityModel> Entities = new();
+    protected List<EntityModel>? Entities = new();
     public List<RelationDto> Relations { get; set; } = new();
 
     protected EntityModel EntityModel = new();
@@ -87,26 +100,23 @@
     RadzenDataGrid<RelationDto>? Grid;
 
     List<string> DataTypes = new()
-    {
+                    {
         "Guid",
         "int",
         "long",
         "decimal",
-        "floot",
+        "float",
         "string",
         "bool",
         "DateTime"
-    };
+                    };
 
     RelationDto? RowToInsert;
 
     protected async Task Load()
     {
-        Project = await ctx.Projects.FirstOrDefaultAsync(e => e.Id == ProjectId);
-        Entities = await ctx.Entities
-            .Include(e => e.Rows)
-            .Where(e => e.ProjectId == ProjectId)
-            .ToListAsync();
+        (Project, Entities) = await CliData.Load(ProjectId);
+        StateHasChanged();
     }
 
     protected override async Task OnInitializedAsync()
@@ -122,138 +132,133 @@
     protected async Task ShowAddTable()
     {
         var result = await DialogService.OpenAsync("Add Entity", ds =>
-            @<RadzenStack Gap="1.5rem">
-                <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" AlignItems="AlignItems.Start" JustifyContent="JustifyContent.SpaceBetween">
-                    <div class="form-group">
-                        <RadzenLabel>Entity Name</RadzenLabel>
-                        <RadzenTextBox @bind-Value="EntityModel.EntityName"
-                                       Style="width: 100%; max-width: 400px;"/>
-                    </div>
-                    <div class="form-group">
-                        <RadzenLabel>PK Type</RadzenLabel>
-                        <RadzenDropDown @bind-Value="@EntityModel.PkType"
-                                        Data="@DataTypes"
-                                        Style="width: 100%; max-width: 400px;"
-                                        AllowFiltering="true"/>
-                    </div>
-                    <div class="form-group">
-                        <RadzenLabel Text="Generate API Controller"/>
-                        <RadzenButton ButtonStyle="@ButtonStyle.Primary"
-                                      Shade="Shade.Lighter"
-                                      Click="() => EntityModel.HasApi = !EntityModel.HasApi">
+    @<RadzenStack Gap="1.5rem">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" AlignItems="AlignItems.Start" JustifyContent="JustifyContent.SpaceBetween">
+            <div class="form-group">
+                <RadzenLabel>Entity Name</RadzenLabel>
+                <RadzenTextBox @bind-Value="EntityModel.EntityName"
+                               Style="width: 100%; max-width: 400px;" />
+            </div>
+            <div class="form-group">
+                <RadzenLabel>PK Type</RadzenLabel>
+                <RadzenDropDown @bind-Value="@EntityModel.PkType"
+                                Data="@DataTypes"
+                                Style="width: 100%; max-width: 400px;"
+                                AllowFiltering="true" />
+            </div>
+            <div class="form-group">
+                <RadzenLabel Text="Generate API Controller" />
+                <RadzenButton ButtonStyle="@ButtonStyle.Primary"
+                              Shade="Shade.Lighter"
+                              Click="() => EntityModel.HasApi = !EntityModel.HasApi">
 
-                            <RadzenBadge
-                                BadgeStyle="@(EntityModel.HasApi ? BadgeStyle.Success : BadgeStyle.Danger)"
-                                Text="@(EntityModel.HasApi ? "YES" : "NO")" Shade="Shade.Lighter"/>
-                        </RadzenButton>
-                    </div>
-                </RadzenStack>
+                    <RadzenBadge BadgeStyle="@(EntityModel.HasApi ? BadgeStyle.Success : BadgeStyle.Danger)"
+                                 Text="@(EntityModel.HasApi ? "YES" : "NO")" Shade="Shade.Lighter" />
+                </RadzenButton>
+            </div>
+        </RadzenStack>
 
-                <RadzenStack Orientation="Orientation.Horizontal">
-                    <RadzenButton Text="Ok" Click="() => AddEntity(ds)" Style="width: 80px;"/>
-                    <RadzenButton Text="Cancel" Click="() => ds.Close(false)" ButtonStyle="ButtonStyle.Light"/>
-                </RadzenStack>
+        <RadzenStack Orientation="Orientation.Horizontal">
+            <RadzenButton Text="Ok" Click="() => AddEntity(ds)" Style="width: 80px;" />
+            <RadzenButton Text="Cancel" Click="() => ds.Close(false)" ButtonStyle="ButtonStyle.Light" />
+        </RadzenStack>
 
-            </RadzenStack>, new DialogOptions() { ShowTitle = true, Style = "max-width: 375px" });
+    </RadzenStack>
+        , new DialogOptions() { ShowTitle = true, Style = "max-width: 375px" });
     }
 
     private async Task AddEntity(DialogService ds)
     {
         EntityModel.ProjectId = ProjectId;
-        var record = ctx.Entities.Add(EntityModel);
-
-        ctx.SaveChanges();
-        Entities.Add(record.Entity);
+        var entity = await CliData.AddEntity(EntityModel);
+        Entities.Add(entity);
 
         EntityModel = new();
-
         ctx.DumpProject(ProjectId, Project.Path);
         ds.Close(true);
+
+        StateHasChanged();
+        NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = $"Success",
+                    Detail = "Entity Created successfully"
+                });
     }
 
     private async Task LoadRelations()
     {
-        Relations = await ctx.Relations
-            .Include(r => r.ParentEntity)
-            .Include(r => r.ChiledEntity)
-            .Where(r => r.ParentEntity.ProjectId == ProjectId)
-            .Select(r => new RelationDto
-            {
-                Id = r.Id,
-                Name = r.Name,
-                ParentId = r.ParentId,
-                ParentEntityName = r.ParentEntity.EntityName,
-                ChildId = r.ChildId,
-                ChiledEntityName = r.ChiledEntity.EntityName
-            }).ToListAsync();
+        Relations = await CliData.LoadRelations(ProjectId);
+        StateHasChanged();
     }
 
     protected async Task ManageRelations()
     {
         await LoadRelations();
         var result = await DialogService.OpenAsync("Manage Relation", ds =>
-            @<RadzenStack Gap="1.5rem">
-                <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" AlignItems="AlignItems.Start" JustifyContent="JustifyContent.SpaceBetween">
-                    <RadzenDataGrid AllowFiltering="false" FilterPopupRenderMode="PopupRenderMode.OnDemand"
-                                    FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" AllowPaging="false"
-                                    AllowSorting="false" Data="@Relations" TItem="RelationDto"
-                                    @ref="Grid" Style="width:90%">
-                        <HeaderTemplate>
-                            <RadzenButton ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
-                                          Icon="add_circle_outline"
-                                          Text="Add" Click="@InsertRelationRow" Disabled="@(RowToInsert != null)"/>
-                        </HeaderTemplate>
-                        <Columns>
-                            <RadzenDataGridColumn TItem="RelationDto" Property="ParentEntityName" Title="Parent" Width="40%">
-                                <EditTemplate Context="row">
-                                    <RadzenDropDown @bind-Value="row.ParentEntityName" Data="@Entities"
-                                                    ValueProperty="EntityName" TextProperty="EntityName"
-                                                    Style="width:100%; display: block;"
-                                                    AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"/>
-                                </EditTemplate>
-                            </RadzenDataGridColumn>
+    @<RadzenStack Gap="1.5rem">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" AlignItems="AlignItems.Start" JustifyContent="JustifyContent.SpaceBetween">
+            <RadzenDataGrid AllowFiltering="false" FilterPopupRenderMode="PopupRenderMode.OnDemand"
+                            FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" AllowPaging="false"
+                            AllowSorting="false" Data="@Relations" TItem="RelationDto"
+                            @ref="Grid" Style="width:90%">
+                <HeaderTemplate>
+                    <RadzenButton ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
+                                  Icon="add_circle_outline"
+                                  Text="Add" Click="@InsertRelationRow" Disabled="@(RowToInsert != null)" />
+                </HeaderTemplate>
+                <Columns>
+                    <RadzenDataGridColumn TItem="RelationDto" Property="ParentEntityName" Title="Parent" Width="40%">
+                        <EditTemplate Context="row">
+                            <RadzenDropDown @bind-Value="row.ParentEntityName" Data="@Entities"
+                                            ValueProperty="EntityName" TextProperty="EntityName"
+                                            Style="width:100%; display: block;"
+                                            AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" />
+                        </EditTemplate>
+                    </RadzenDataGridColumn>
 
-                            <RadzenDataGridColumn TItem="RelationDto" Property="ChiledEntityName" Title="Child" Width="40%">
-                                <EditTemplate Context="row">
-                                    <RadzenDropDown @bind-Value="row.ChiledEntityName" Data="@Entities"
-                                                    ValueProperty="EntityName" TextProperty="EntityName"
-                                                    Style="width:100%; display: block;"
-                                                    AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"/>
-                                </EditTemplate>
-                            </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="RelationDto" Property="ChiledEntityName" Title="Child" Width="40%">
+                        <EditTemplate Context="row">
+                            <RadzenDropDown @bind-Value="row.ChiledEntityName" Data="@Entities"
+                                            ValueProperty="EntityName" TextProperty="EntityName"
+                                            Style="width:100%; display: block;"
+                                            AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" />
+                        </EditTemplate>
+                    </RadzenDataGridColumn>
 
 
-                            <RadzenDataGridColumn TItem="RelationDto" Context="row" Filterable="false" Sortable="false"
-                                                  TextAlign="TextAlign.Right" Width="20%">
-                                <Template Context="row">
+                    <RadzenDataGridColumn TItem="RelationDto" Context="row" Filterable="false" Sortable="false"
+                                          TextAlign="TextAlign.Right" Width="20%">
+                        <Template Context="row">
 
-                                    <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat"
-                                                  Shade="Shade.Lighter" Size="ButtonSize.Medium" class="my-1 ms-1"
-                                                  Click="@(args => DeleteRelation(row))" @onclick:stopPropagation="true">
-                                    </RadzenButton>
-                                </Template>
-                                <EditTemplate Context="row">
-                                    <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Variant="Variant.Flat"
-                                                  Size="ButtonSize.Medium" Click="@((args) => SaveRelation(row))">
-                                    </RadzenButton>
-                                    <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
-                                                  Size="ButtonSize.Medium" class="my-1 ms-1" Click="@((args) => CancelEdit(row))">
-                                    </RadzenButton>
-                                    @* <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat"  *@
-                                    @*               Shade="Shade.Lighter" Size="ButtonSize.Medium" class="my-1 ms-1" Click="@(args => DeleteRow(row))"> *@
-                                    @* </RadzenButton> *@
-                                </EditTemplate>
-                            </RadzenDataGridColumn>
+                            <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat"
+                                          Shade="Shade.Lighter" Size="ButtonSize.Medium" class="my-1 ms-1"
+                                          Click="@(args => DeleteRelation(row))" @onclick:stopPropagation="true">
+                            </RadzenButton>
+                        </Template>
+                        <EditTemplate Context="row">
+                            <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Variant="Variant.Flat"
+                                          Size="ButtonSize.Medium" Click="@((args) => SaveRelation(row))">
+                            </RadzenButton>
+                            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                                          Size="ButtonSize.Medium" class="my-1 ms-1" Click="@((args) => CancelEdit(row))">
+                            </RadzenButton>
+                            @* <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat"  *@
+                            @*               Shade="Shade.Lighter" Size="ButtonSize.Medium" class="my-1 ms-1" Click="@(args => DeleteRow(row))"> *@
+                            @* </RadzenButton> *@
+                        </EditTemplate>
+                    </RadzenDataGridColumn>
 
-                        </Columns>
-                    </RadzenDataGrid>
-                </RadzenStack>
+                </Columns>
+            </RadzenDataGrid>
+        </RadzenStack>
 
-                <RadzenStack Orientation="Orientation.Horizontal">
-                    <RadzenButton Text="Close" Click="() => CloseRelationManager(ds)" ButtonStyle="ButtonStyle.Primary"/>
-                </RadzenStack>
+        <RadzenStack Orientation="Orientation.Horizontal">
+            <RadzenButton Text="Close" Click="() => CloseRelationManager(ds)" ButtonStyle="ButtonStyle.Primary" />
+        </RadzenStack>
 
-            </RadzenStack>, new DialogOptions() { ShowTitle = true, Style = "min-width: 700px" });
+    </RadzenStack>
+    , new DialogOptions() { ShowTitle = true, Style = "min-width: 700px" });
     }
 
     void Reset()
@@ -263,12 +268,11 @@
 
     async Task DeleteRelation(RelationDto row)
     {
-        
-        var relation = await ctx.Relations.FindAsync(row.Id);
-        ctx.Relations.Remove(relation);
-        await ctx.SaveChangesAsync();
 
-        if(row.Applied){
+        await CliData.DeleteRelation(row);
+
+        if (row.Applied)
+        {
             _ = await CliWrap.Cli.Wrap("mma")
                 .WithWorkingDirectory(Project.Path)
                 .WithArguments(args => args.Add("g").Add("r")
@@ -277,19 +281,27 @@
                     .Add("--remove"))
                 .ExecuteAsync();
         }
-        
+
         Reset();
 
         if (Relations.Contains(row))
         {
             Relations.Remove(row);
-            await Grid.Reload();
         }
         else
         {
             Grid.CancelEditRow(row);
-            await Grid.Reload();
         }
+
+
+        NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = $"Success",
+                Detail = "Relation Removed successfully"
+            });
+
+        await Grid.Reload();
     }
 
     async Task SaveRelation(RelationDto dto)
@@ -300,42 +312,49 @@
         var child = Entities
             .First(e => e.EntityName == dto.ChiledEntityName);
         RelationDto row = new()
-        {
-            ChildId = child.Id,
-            ChiledEntityName = child.EntityName,
-            Name = $"{dto.ParentEntityName}_{dto.ChiledEntityName}_{dto.ParentEntityName}Id",
-            ParentId = parent.Id,
-            ParentEntityName = parent.EntityName,
-            Applied = false,
-            PkType = parent.PkType
-        };
+            {
+                ChildId = child.Id,
+                ChiledEntityName = child.EntityName,
+                Name = $"{dto.ParentEntityName}_{dto.ChiledEntityName}_{dto.ParentEntityName}Id",
+                ParentId = parent.Id,
+                ParentEntityName = parent.EntityName,
+                Applied = false,
+                PkType = parent.PkType
+            };
 
         _ = await ctx.Relations.AddAsync(new()
-        {
-            ChildId = child.Id,
-            Name = $"{dto.ParentEntityName}_{dto.ChiledEntityName}_{dto.ParentEntityName}Id",
-            ParentId = parent.Id,
-            Applied = false,
-        });
-        
+            {
+                ChildId = child.Id,
+                Name = $"{dto.ParentEntityName}_{dto.ChiledEntityName}_{dto.ParentEntityName}Id",
+                ParentId = parent.Id,
+                Applied = false,
+            });
+
         _ = await ctx.EntityRows.AddAsync(new()
-        {
-            ColumnName = $"{row.ParentEntityName}Id",
-            DataType = row.PkType,
-            Nullable = true,
-            IsForeignKey = true,
-            Applied = true,
-            EntityId=row.ChildId
+            {
+                ColumnName = $"{row.ParentEntityName}Id",
+                DataType = row.PkType,
+                Nullable = true,
+                IsForeignKey = true,
+                Applied = true,
+                EntityId = row.ChildId
 
-        });
+            });
 
-        _ = await ctx.SaveChangesAsync(); 
+        _ = await ctx.SaveChangesAsync();
         await Load();
-        StateHasChanged();
+
         await LoadRelations();
         await Grid.UpdateRow(dto);
-       
+        StateHasChanged();
         Reset();
+
+        NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = $"Success",
+                Detail = "Relation Created successfully"
+            });
     }
 
     void CancelEdit(RelationDto row)
@@ -386,39 +405,13 @@
 
             projectEntites.ForEach(async e =>
             {
-                _ = await CliWrap.Cli.Wrap("mma")
-                    .WithWorkingDirectory(Project.Path)
-                    .WithArguments(args => args.Add("g").Add("e")
-                        .Add(e.EntityName).Add(e.PkType)
-                        .Add("--mapper").Add("AutoMaper")
-                        .Add(e.HasApi ? string.Empty : "--no-api"))
-                    .WithStandardOutputPipe(PipeTarget.ToDelegate(Console.WriteLine))
-                    .WithStandardErrorPipe(PipeTarget.ToDelegate(Console.WriteLine))
-                    .ExecuteAsync();
+                _ = CliData.MigrateEntity(e, Project.Path);
 
-                e.Rows
-                    .Where(er => !er.IsForeignKey && !er.Applied)
+                e.Rows.Where(er => !er.IsForeignKey && !er.Applied)
                     .ToList().ForEach(async r =>
                     {
-                        try
-                        {
-                            _ = await CliWrap.Cli.Wrap("mma")
-                                .WithWorkingDirectory(Project.Path)
-                                .WithArguments(args => args.Add("g").Add("p")
-                                    .Add(e.EntityName).Add(r.ColumnName)
-                                    .Add(r.DataType).Add(r.Nullable ? "true" : "false"))
-                                .WithStandardOutputPipe(PipeTarget.ToDelegate(Console.WriteLine))
-                                .WithStandardErrorPipe(PipeTarget.ToDelegate(Console.WriteLine))
-                                .ExecuteAsync();
-                            await UpdateRow(r);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine(ex);
-    //throw;
-                        }
-
-                        await Task.Delay(100);
+                        _ = CliData.MigrateProperty(r, e.EntityName, Project.Path);
+                        await UpdateRow(r);
                     });
 
                 if (e.ChildRelations?.Any() == true)
@@ -430,17 +423,10 @@
                                 .Include(re => re.ParentEntity)
                                 .Include(re => re.ChiledEntity)
                                 .FirstOrDefaultAsync(rels => rels.Id == relationr.Id);
-                            _ = await CliWrap.Cli.Wrap("mma")
-                                .WithWorkingDirectory(Project.Path)
-                                .WithArguments(args => args.Add("g").Add("r")
-                                    .Add(r.ParentEntity.EntityName).Add(r.ChiledEntity.EntityName)
-                                    .Add($"{r.ParentEntity.EntityName}Id").Add(r.ParentEntity.PkType))
-                                .WithStandardOutputPipe(PipeTarget.ToDelegate(Console.WriteLine))
-                                .WithStandardErrorPipe(PipeTarget.ToDelegate(Console.WriteLine))
-                                .ExecuteAsync();
+                            _ = CliData.MigrateRelation(r, Project.Path);
 
                             await UpdateRelation(r);
-                            await Task.Delay(100);
+
                         });
                 }
                 await Update(e);
@@ -453,8 +439,8 @@
             var ef_path = $"{Project.Path}\\{Project.Name}\\{Project.Name}.EntityFramework";
             var api_path = $"{Project.Path}\\{Project.Name}\\{Project.Name}.AppApi";
 
-    // genearte migration
-    //dotnet ef migrations add InitialCreate -p YourSolution.Infrastructure -s YourSolution.WebAPI
+            // genearte migration
+            //dotnet ef migrations add InitialCreate -p YourSolution.Infrastructure -s YourSolution.WebAPI
 
             await Cli.Wrap("dotnet")
                 .WithWorkingDirectory(ef_path)
@@ -463,31 +449,179 @@
                     .Add("--startup-project").Add(api_path))
                 .ExecuteAsync();
 
-    // apply migration
-    //dotnet ef database update --context ApplicationDbContext --startup-project $api_src_path
+            // apply migration
+            //dotnet ef database update --context ApplicationDbContext --startup-project $api_src_path
 
-    // await Cli.Wrap("dotnet")
-    // .WithWorkingDirectory(ef_path)
-    // .WithArguments(a => a.Add("ef").Add("database")
-    // .Add("update").Add("--context").Add("ApplicationDbContext")
-    // .Add("--startup-project").Add(api_path))
-    // .ExecuteAsync();
+            // await Cli.Wrap("dotnet")
+            // .WithWorkingDirectory(ef_path)
+            // .WithArguments(a => a.Add("ef").Add("database")
+            // .Add("update").Add("--context").Add("ApplicationDbContext")
+            // .Add("--startup-project").Add(api_path))
+            // .ExecuteAsync();
 
 
-    // await DialogService.AlertAsync("Schema Migrated successfully", "Success");
-            NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true);
+            NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = $"Success",
+                    Detail = "Schema Migrated successfully"
+                });
+            //NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true);
+
+            StateHasChanged();
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex);
-    // await DialogService.AlertAsync("Fatal Error review your design and try again.", "Error");
+            NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = $"Error",
+                    Detail = "Fatal Error review your design and try again."
+                });
         }
     }
- 
+
     private void CloseRelationManager(DialogService ds)
     {
         ds.Close(false);
         NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true);
-        
+
+    }
+
+    protected async Task ImportDatabase()
+    {
+        string? connString = await DialogService.OpenAsync<ImportDatabaseDialog>("Import Existing Database");
+
+        try
+        {
+            DatabaseEngine database = new(connString);
+
+            var tablesScheme = database.ReadTablesScheme();
+            if (!tablesScheme.Any())
+            {
+                DialogService.Close(true);
+
+                NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Warning,
+                        Summary = $"Warning",
+                        Detail = "No Schema to Import"
+                    });
+
+                return;
+            }
+            var relationsScheme = database.ReadRelationsScheme();
+
+            var tablesList = tablesScheme.GroupBy(t => t.table_name)
+                .Select(t => database.GetTable(t.ToList(), relationsScheme))
+                .ToList();
+
+            Entities = tablesList.Select(t => new EntityModel()
+                {
+                    EntityName = t.Name,
+                    PkType = t.IdType,
+                    HasApi = true,
+                    Applied = true,
+                    ProjectId = Project.Id,
+                    Rows = t.Columns.Select(c => new EntityRowModel
+                    {
+                        Applied = true,
+                        ColumnName = c.Name,
+                        DataType = c.DataType,
+                        IsForeignKey = c.IsForeignKey,
+                        Nullable = c.IsNullable
+                    }).ToList()
+
+                }).ToList();
+
+            Relations = relationsScheme.Select(r => new RelationDto
+                {
+                    Applied = true,
+                    ChiledEntityName = r.RelatedTableName.ToEntityName(),
+                    ParentEntityName = r.CurrentTable.ToEntityName(),
+                    ForeignKeyProperty = r.ForeignKey,
+                    PkType = r.DataType
+                }).ToList();
+
+            var realtionsList = Relations.Select(TorelationModel);
+
+            await ctx.Entities.AddRangeAsync(Entities);
+            await ctx.SaveChangesAsync();
+
+            await ctx.Relations.AddRangeAsync(realtionsList);
+            await ctx.SaveChangesAsync();
+
+            await Load();
+            StateHasChanged();
+
+            var projectEntites = await ctx.Entities
+                  .Where(e => e.ProjectId == ProjectId)
+                  .Include(e => e.Rows)
+                  .Include(e => e.ChildRelations)
+                  .ToListAsync();
+
+            foreach (var e in projectEntites)
+            {
+                var created = CliData.MigrateEntity(e, Project.Path);
+                if (!created)
+                    continue;
+
+                e.Rows.Where(er => !er.IsForeignKey)
+                    .ToList().ForEach(r =>
+                    {
+                        _ = CliData.MigrateProperty(r, e.EntityName, Project.Path);
+                    });
+
+                if (e.ChildRelations?.Any() == true)
+                {
+                    e.ChildRelations
+                        .ToList().ForEach(async relationr =>
+                        {
+                            var r = await ctx.Relations
+                                .Include(re => re.ParentEntity)
+                                .Include(re => re.ChiledEntity)
+                                .FirstOrDefaultAsync(rels => rels.Id == relationr.Id);
+                            _ = CliData.MigrateRelation(r, Project.Path);
+
+                        });
+                }
+            }
+
+            DialogService.Close(true);
+
+            NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = $"Success",
+                    Detail = "Schema Imprted successfully"
+                });
+        }
+        catch (Exception ex)
+        {
+
+            NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = $"error",
+                    Detail = ex.Message
+                });
+        }
+
+    }
+
+    private RelationModel TorelationModel(RelationDto dto)
+    {
+
+        var parent = ctx.Entities.FirstOrDefault(e => e.EntityName == dto.ParentEntityName);
+        var child = ctx.Entities.FirstOrDefault(e => e.EntityName == dto.ChiledEntityName);
+
+        return new RelationModel
+            {
+                ChildId = child.Id,
+                Name = $"{dto.ParentEntityName}_{dto.ChiledEntityName}_{dto.ParentEntityName}Id",
+                ParentId = parent.Id,
+                Applied = false,
+            };
+
     }
 }
