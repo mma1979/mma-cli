@@ -1,8 +1,8 @@
 # MMA CLI
 
 ![build and test](https://img.shields.io/github/actions/workflow/status/abpframework/abp/build-and-test.yml?branch=dev&style=flat-square)
-[![NuGet](https://img.shields.io/badge/nugett-v3.1.3-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
-[![NuGet (with prereleases)](https://img.shields.io/badge/nugett-v4.0.0%20rc.7-yellow?style=flat-square)](https://www.nuget.org/packages/mma-cli/4.0.0-rc.7)
+[![NuGet](https://img.shields.io/badge/nugett-v4.0.1-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
+
 
 ```
 .___  ___. .___  ___.      ___      
@@ -29,7 +29,7 @@ MMA Cli is a complete **Code Generator** based on **ASP.NET Core** to create **m
 Install the `mma-cli`:
 
 ````bash
-dotnet tool install --global mma-cli --version 4.0.0-rc.7
+dotnet tool install --global mma-cli
 ````
 
 Create a new Solution:
@@ -52,7 +52,6 @@ mma n SolutionName
 mma n SolutionName --mapper mapster
 ````
 
-> Note: The UI version supports only AutoMapper
 
 Now, we need to navigate to the solution folder to start add components.
 
@@ -148,17 +147,20 @@ You can use interactive mode by enter command `mma` without any arguments in sol
 
 Also you can use UI mode to create and manage your solutions. Select `UI` from `Interactive` or execute `mma ui`
 
+> Thanks to [Radzen](https://blazor.radzen.com/)
 
 ````bash
 mma ui
 ````
 
-![image](https://i.imgur.com/0HnJstp.png)
+![image](https://imgur.com/wE6nXWF.png)
 
-![image](https://i.imgur.com/mkQKfvc.png)
+![image](https://imgur.com/ARweSJu.png)
 
-![image](https://i.imgur.com/C28low8.png)
+![image](https://imgur.com/5BxbvkC.png)
 
-![image](https://i.imgur.com/VBrwxCR.png)
+![image](https://imgur.com/iMnGJcx.png)
 
-![image](https://i.imgur.com/7mJBqy1.png)
+![image](https://imgur.com/eYiSLBS.png)
+
+![image](https://imgur.com/CS8PQE2.png)

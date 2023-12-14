@@ -1,0 +1,261 @@
+﻿@page "/new-solution"
+@page "/import-solution"
+
+@inject NavigationManager NavigationManager
+@inject CliDbContext ctx
+
+@inject DialogService DialogService
+
+<div class="row">
+    <div class="col-md-12" style="margin-bottom:20px; margin-top:5px;">
+        <RadzenHeader>
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10">
+
+                <RadzenIcon Icon="note_add" Style="margin-top: -5px"/>
+                <RadzenLabel Text="Create Solution" Style="margin-top: -5px"/>
+
+                <span>&nbsp;</span>
+
+                <RadzenTextBox Style="margin-top: 5px; width:50%;"
+                               Placeholder="Solution Path"
+                               Value="@WorkingDirectory"/>
+
+                <RadzenButton Icon="cached"
+                              Style="margin-top: 5px"
+                              Click="LoadDirectory"/>
+
+                <RadzenButton Icon="change_history"
+                              Style="margin-top: 5px"
+                              Click="LoadParentDirectory"/>
+
+                @if (!IsImport)
+                {
+                    <RadzenTextBox Style="margin-top: 5px; width:250px;"
+                                   Placeholder="New Folder"
+                                   Value="@NewFolder"/>
+
+                    <RadzenButton Icon="note_add"
+                                  Style="margin-top: 5px"
+                                  Click="NewDirectory"/>
+                }
+
+            </RadzenStack>
+        </RadzenHeader>
+
+    </div>
+
+    <div class="col-md-12">
+        <RadzenBody Expanded="true">
+            @if (IsImport)
+            {
+                <RadzenButton Text="Import Solution"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Icon="backup"
+                              Style="margin-top: 5px; margin-bottom:10px;"
+                              Click="ImportSolution"/>
+            }
+            else
+            {
+                <RadzenButton Text="Create Solution"
+                              ButtonStyle="ButtonStyle.Success"
+                              Icon="add"
+                              Style="margin-top: 5px; margin-bottom:10px;"
+                              Click="ShowCreateDialog"/>
+            }
+            <br/>
+            <RadzenListBox @bind-Value="@SelectedDirectory"
+                           Data="@Output" Style="width: 100%; height:100%; min-height:400px;" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                           Change="OnChange"/>
+            
+            <RadzenDialog/>
+        </RadzenBody>
+
+        
+
+    </div>
+</div>
+
+@code {
+    private bool ShowCreateSolution { get; set; } = false;
+    private bool IsImport { get; set; } = false;
+
+    private string WorkingDirectory { get; set; } = "D:\\";
+    private string SelectedDirectory { get; set; } = "";
+    private string SolutionName { get; set; } = "OPT.SolutionName";
+    private string NewFolder { get; set; } = "New Folder";
+
+    private ProjectModel Project { get; set; } = new();
+
+    private List<string> Output { get; set; } = new();
+    private string Mapper { get; set; } = "AutoMapper";
+
+    public static List<string> MappersList = new()
+    {
+        "AutoMapper",
+        "Mapster",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        IsImport = NavigationManager.Uri.IndexOf("import-solution") >= 0;
+        await LoadDirectory();
+    }
+
+    private async Task LoadDirectory()
+    {
+        var directories = Directory.EnumerateDirectories(WorkingDirectory)
+            .Where(dir => (File.GetAttributes(dir) & FileAttributes.Hidden) != FileAttributes.Hidden)
+            .ToList();
+
+        Output = directories
+            .Select(d => d.Replace($"{WorkingDirectory}", "")
+                .TrimStart('\\')
+            ).ToList();
+    }
+
+    private async Task LoadParentDirectory()
+    {
+        var index = WorkingDirectory.LastIndexOf('\\');
+        if (index == 2 && WorkingDirectory.Length <= 3)
+            return;
+
+        WorkingDirectory = WorkingDirectory
+            .AsSpan(0, index)
+            .ToString();
+        if (WorkingDirectory.Length == 2)
+            WorkingDirectory += '\\';
+
+        await LoadDirectory();
+    }
+
+    private async Task NewDirectory()
+    {
+        if (Output.Contains(NewFolder))
+            NewFolder += $"{new Random().Next(1, 100)}";
+
+        var path = Path.Combine(WorkingDirectory, NewFolder);
+        Directory.CreateDirectory(path);
+        WorkingDirectory = path;
+
+        await LoadDirectory();
+    }
+
+    private async Task ImportSolution()
+    {
+        _ = await Cli.Wrap("mma")
+            .WithWorkingDirectory(WorkingDirectory)
+            .WithArguments(a => a.Add("import")
+                .Add(WorkingDirectory))
+            .ExecuteAsync();
+
+        NavigationManager.NavigateTo("/");
+    }
+
+    private async Task OnChange()
+    {
+        WorkingDirectory = Path.Combine(WorkingDirectory, SelectedDirectory);
+        await LoadDirectory();
+    }
+    
+    private async Task CreateSolution(DialogService ds)
+    {
+        _ = await Cli.Wrap("mma")
+            .WithWorkingDirectory(WorkingDirectory)
+            .WithArguments(a => a.Add("new")
+                .Add(SolutionName)
+                .Add("--mapper").Add(Mapper))
+            .WithStandardOutputPipe(PipeTarget.ToDelegate(HandleSuccess))
+            .WithStandardErrorPipe(PipeTarget.ToDelegate(HandleError))
+            .ExecuteAsync();
+
+
+        ds.Close(true);
+
+
+        var ef_path = $"{WorkingDirectory}\\{SolutionName}\\{SolutionName}\\{SolutionName}.EntityFramework";
+        var api_path = $"{WorkingDirectory}\\{SolutionName}\\{SolutionName}\\{SolutionName}.AppApi";
+
+
+        await Cli.Wrap("dotnet")
+            .WithWorkingDirectory(ef_path)
+            .WithArguments(a => a.Add("ef").Add("migrations")
+                .Add("add").Add($"InitialMigration").Add("--context").Add("ApplicationDbContext")
+                .Add("--startup-project").Add(api_path))
+            .ExecuteAsync();
+
+        await LoadDirectory();
+
+
+    }
+
+    private async Task HandleSuccess(string output)
+    {
+
+        var path = Path.Combine(WorkingDirectory, SolutionName);
+
+        var proj = ctx.Projects
+            .FirstOrDefault(p => p.Name == SolutionName && p.Path == path);
+
+        if (proj != null)
+        {
+            Project = proj;
+            return;
+        }
+
+
+        var e = ctx.Projects.Add(new()
+        {
+            Name = SolutionName,
+            Path = Path.Combine(WorkingDirectory, SolutionName)
+
+        });
+
+        Project = e.Entity;
+
+        await ctx.SaveChangesAsync();
+
+        ShowCreateSolution = false;
+
+        //await DialogService.AlertAsync("Solution created successfully", "Success");
+        NavigationManager.NavigateTo($"/solution-workspace/{Project.Id}");
+
+
+    }
+
+    private async Task HandleError(string output)
+    {
+
+        //await DialogService.AlertAsync(output, "Error");
+    }
+
+    private async Task ShowCreateDialog()
+    {
+        
+        var result = await DialogService.OpenAsync("Create Solution", ds =>
+            @<RadzenStack Gap="1.5rem">
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+                    <div class="form-group">
+                        <RadzenLabel>Solution Name</RadzenLabel>
+                        <RadzenTextBox @bind-Value="SolutionName"
+                                       Style="width: 100%; max-width: 400px;"/>
+                    </div>
+                    <div class="form-group">
+                        <RadzenLabel>Mapper Package</RadzenLabel>
+                        <RadzenDropDown @bind-Value="@Mapper"
+                                        Data="@MappersList" 
+                                        Style="width: 100%; max-width: 400px;"
+                                        AllowFiltering="true"/>
+                    </div>
+                </RadzenStack>
+
+                    <RadzenStack Orientation="Orientation.Horizontal">
+                        <RadzenButton Text="Ok" Click="() => CreateSolution(ds)" Style="width: 80px;"/>
+                        <RadzenButton Text="Cancel" Click="() => ds.Close(false)" ButtonStyle="ButtonStyle.Light"/>
+                    </RadzenStack>
+                    
+            </RadzenStack>, new DialogOptions() { ShowTitle = true, Style = "max-width: 375px"});
+        
+    }
+
+
+}
