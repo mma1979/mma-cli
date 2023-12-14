@@ -1,7 +1,7 @@
 # MMA CLI
 
 ![build and test](https://img.shields.io/github/actions/workflow/status/abpframework/abp/build-and-test.yml?branch=dev&style=flat-square)
-[![NuGet](https://img.shields.io/badge/nugett-v4.1.1-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
+[![NuGet](https://img.shields.io/badge/nugett-v4.1.2-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
 
 
 ```
@@ -159,12 +159,12 @@ mma ui
 
 ![image](https://imgur.com/wE6nXWF.png)
 
-![image](https://imgur.com/ARweSJu.png)
+![image](https://i.imgur.com/ARweSJu.png)
 
-![image](https://imgur.com/5BxbvkC.png)
+![image](https://i.imgur.com/5BxbvkC.png)
 
-![image](https://imgur.com/iMnGJcx.png)
+![image](https://i.imgur.com/iMnGJcx.png)
 
-![image](https://imgur.com/eYiSLBS.png)
+![image](https://i.imgur.com/eYiSLBS.png)
 
-![image](https://imgur.com/CS8PQE2.png)
+![image](https://i.imgur.com/CS8PQE2.png)
