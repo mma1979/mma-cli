@@ -23,6 +23,16 @@ namespace Mma.Cli.Shared.Helpers
 
         }
 
+        public static string DetectMapper(string solutionPath)
+        {
+            var files = Directory.GetFiles(solutionPath, "MappingProfile.cs", SearchOption.AllDirectories);
+
+            return files.Any() ?
+                Mappers.AutoMapper :
+                Mappers.Mapster;
+
+        }
+
         public static string GetExecutablePath()
         {
             string executablePath = Assembly.GetExecutingAssembly().Location;

@@ -1,7 +1,7 @@
 # MMA CLI
 
 ![build and test](https://img.shields.io/github/actions/workflow/status/abpframework/abp/build-and-test.yml?branch=dev&style=flat-square)
-[![NuGet](https://img.shields.io/badge/nugett-v4.0.1-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
+[![NuGet](https://img.shields.io/badge/nugett-v4.1.1-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
 
 
 ```
@@ -16,6 +16,10 @@
 
 MMA Cli is a complete **Code Generator** based on **ASP.NET Core** to create **modern APIs** by following the software development **best practices** and the **latest technologies**.
 
+# Change Log:
+- Improved migration process and enrich with notifications
+- Databse first mode has been added to `UI` mode using `Import form Database' option
+![image](https://i.imgur.com/ZqG95uM.png)
 
 
 ## Getting Started
@@ -46,7 +50,7 @@ mma n SolutionName
 
 #### available options.
 
-`--mapper` tom indecat which object mapping libirary that accept `mapster` or `atomapper` and default value is `automapper`
+`--mapper` tom indecat which object mapping libirary that accept `mapster` or `automapper` and default value is `automapper`
 
 ````bash
 mma n SolutionName --mapper mapster
@@ -79,7 +83,7 @@ cd SolutionName
 	- long
 	- string
 	- decimal
-	- floot
+	- float
 	- bool
 	- DateTime
 	
@@ -87,7 +91,7 @@ cd SolutionName
 
 	#### available options.
 
-	- `--mapper` tom indecat which object mapping libirary that accept `mapster` or `atomapper` and default value is `automapper`
+	- `--mapper` tom indecat which object mapping libirary that accept `mapster` or `automapper` and default value is `automapper`
 
 	- `--no-api` to skip generaate API controller for this entity.
 	
@@ -106,7 +110,7 @@ cd SolutionName
 	- long
 	- string
 	- decimal
-	- floot
+	- float
 	- bool
 	- DateTime
 	

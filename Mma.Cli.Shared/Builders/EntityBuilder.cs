@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Resources;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -23,6 +24,11 @@ namespace Mma.Cli.Shared.Builders
         public EntityBuilder()
         {
             SolutionPath = Directory.GetCurrentDirectory();
+        }
+
+        public EntityBuilder(string solutionPath)
+        {
+            SolutionPath = solutionPath;
         }
 
         public static EntityBuilder New(string mapper, string entityName, string pkTyep)
@@ -59,7 +65,25 @@ namespace Mma.Cli.Shared.Builders
             return builder;
         }
 
-       
+        public static EntityBuilder New(string[] args, string solutionPath)
+        {
+            var mapperFlagIndex = Array.IndexOf(args, Flags.MapperFlag);
+            var mapper = args[mapperFlagIndex + 1].ToLower() switch
+            {
+                "mapster" => Mappers.Mapster,
+                _ => Mappers.AutoMapper
+            };
+            var builder = new EntityBuilder(solutionPath);
+            builder.ComponentType = args[1];
+            builder.ComponentName = args[2];
+            builder.PkType = args.Length > 3 ? args[3] : PkTypes.GUID;
+            builder.Mapper = mapper;
+
+            (builder.SolutionName, builder.ProjectsPath) = BuildHelper.CheckSolutionPath(builder.SolutionPath);
+
+            return builder;
+        }
+
 
         public EntityBuilder GenerateDto()
         {
@@ -207,8 +231,7 @@ namespace Mma.Cli.Shared.Builders
 
             return this;
         }
-
-       
+               
 
         public EntityBuilder DbContextMapping()
         {

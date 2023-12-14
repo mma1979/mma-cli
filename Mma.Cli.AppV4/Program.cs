@@ -202,7 +202,7 @@ namespace Mma.Cli.AppV4
             bool GenerateEntity(bool performRemove)
             {
                 var entityName = Prompt.Input<string>("Enter Entity Name");
-                var pkType = Prompt.Select("Select PK type", new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOOT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME, }, defaultValue: PkTypes.GUID);
+                var pkType = Prompt.Select("Select PK type", new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOAT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME, }, defaultValue: PkTypes.GUID);
                 var generateApi = Prompt.Select("Genereate API cotroller?", new[] { "Yes", "No" }, defaultValue: "Yes");
 
                 var api = generateApi == "Yes" ? "" : "--no-api";
@@ -226,7 +226,7 @@ namespace Mma.Cli.AppV4
             {
                 var entityName = Prompt.Input<string>("Enter Entity Name");
                 var propertyName = Prompt.Input<string>("Enter Property Name");
-                var pType = Prompt.Select("Select Property type", new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOOT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME, }, defaultValue: PkTypes.GUID);
+                var pType = Prompt.Select("Select Property type", new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOAT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME, }, defaultValue: PkTypes.GUID);
                 var nullable = Prompt.Select("Is Nullable?", new[] { "Yes", "No" }, defaultValue: "Yes") == "Yes";
 
                 var n = nullable ? "true" : "false";
@@ -248,7 +248,7 @@ namespace Mma.Cli.AppV4
                 var parentEntityName = Prompt.Input<string>("Enter Reference Entity Name");
                 var chiledEntityName = Prompt.Input<string>("Enter Child Entity Name");
                 var foreignKeyName = Prompt.Input<string>("Enter ForiegnKey Name:");
-                var fkType = Prompt.Select("Select Foreign Key data type", new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOOT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME, }, defaultValue: PkTypes.GUID);
+                var fkType = Prompt.Select("Select Foreign Key data type", new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOAT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME, }, defaultValue: PkTypes.GUID);
 
                 var r = performRemove ? "--remove" : "";
 

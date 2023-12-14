@@ -27,6 +27,11 @@ namespace Mma.Cli.Shared.Builders
             SolutionPath = Directory.GetCurrentDirectory();
         }
 
+        public RelationsBuilder(string solutionPath)
+        {
+            SolutionPath = solutionPath;
+        }  
+
         public static RelationsBuilder New(string[] args)
         {
             if (args.Length < 5)
@@ -51,7 +56,29 @@ namespace Mma.Cli.Shared.Builders
 
         }
 
+        public static RelationsBuilder New(string[] args, string solutionPath)
+        {
+            if (args.Length < 5)
+            {
+                Output.Error("Not enough arguments use mma -h to get help");
+                Environment.Exit(-1);
+                return null;
+            }
 
+            var builder = new RelationsBuilder(solutionPath)
+            {
+                ParentEntity = args[2],
+                ChiledEntity = args[3],
+                ForeignKey = args[4],
+                ForeignDataType = args[5],
+                RemoveFlag = args.Contains(Flags.RemoveFlag)
+            };
+
+            (builder.SolutionName, builder.ProjectsPath) = BuildHelper.CheckSolutionPath(builder.SolutionPath);
+
+            return builder;
+
+        }
 
         public RelationsBuilder UpdateParentDtos()
         {
@@ -469,6 +496,6 @@ namespace Mma.Cli.Shared.Builders
             return $"public {virtualized} {type}? {name} {{get; {modifier}set;}}";
         }
 
-        
+       
     }
 }

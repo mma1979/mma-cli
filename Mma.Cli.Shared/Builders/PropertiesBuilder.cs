@@ -27,6 +27,11 @@ namespace Mma.Cli.Shared.Builders
             SolutionPath = Directory.GetCurrentDirectory();
         }
 
+        public PropertiesBuilder(string solutionPath)
+        {
+            SolutionPath = solutionPath;
+        }
+
         public static PropertiesBuilder New(string[] args, string mapper)
         {
 
@@ -38,6 +43,32 @@ namespace Mma.Cli.Shared.Builders
             }
 
             var builder = new PropertiesBuilder
+            {
+                Mapper = mapper,
+                EntityName = args[2],
+                PropertyName = args[3],
+                DataType = args[4],
+                Nullable = args[5].ToLower() == "true",
+                RemoveFlag = args.Contains(Flags.RemoveFlag),
+            };
+
+            (builder.SolutionName, builder.ProjectsPath) = BuildHelper.CheckSolutionPath(builder.SolutionPath);
+
+
+            return builder;
+        }
+
+        public static PropertiesBuilder New(string[] args, string mapper, string solutionPath)
+        {
+
+            if (args.Length < 6)
+            {
+                Output.Error("Not enough arguments use mma -h to get help");
+                Environment.Exit(-1);
+                return null;
+            }
+
+            var builder = new PropertiesBuilder(solutionPath)
             {
                 Mapper = mapper,
                 EntityName = args[2],
@@ -322,6 +353,6 @@ namespace Mma.Cli.Shared.Builders
             return $"public {DataType}{nullable} {PropertyName} {{get; {modifier}set;}}";
         }
 
-
+        
     }
 }

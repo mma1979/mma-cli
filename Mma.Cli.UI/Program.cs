@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.EntityFrameworkCore;
 
 using Mma.Cli.Shared.Data;
+using Mma.Cli.UI.Data;
 
 using Radzen;
 
@@ -23,6 +24,8 @@ builder.Services.AddDbContext<CliDbContext>(options =>
                options.UseSqlite(builder.Configuration.GetConnectionString("Default")));
 
 builder.Services.AddCors();
+
+builder.Services.AddScoped<CliData>();
 
 
 var app = builder.Build();
