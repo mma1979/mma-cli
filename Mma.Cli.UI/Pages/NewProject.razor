@@ -5,6 +5,7 @@
 @inject CliDbContext ctx
 
 @inject DialogService DialogService
+@inject NotificationService NotificationService
 
 <div class="row">
     <div class="col-md-12" style="margin-bottom:20px; margin-top:5px;">
@@ -86,6 +87,7 @@
     </div>
 </div>
 
+<RadzenNotification/>
 @code {
     private bool ShowCreateSolution { get; set; } = false;
     private bool IsImport { get; set; } = false;
@@ -167,9 +169,32 @@
         WorkingDirectory = Path.Combine(WorkingDirectory, SelectedDirectory);
         await LoadDirectory();
     }
-    
+
     private async Task CreateSolution(DialogService ds)
     {
+        if(string.IsNullOrEmpty(SolutionName))
+        {
+            NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Error,
+                        Summary = $"Erro",
+                        Detail = $"Enter solution name"
+                    });
+
+            return;
+        }
+
+        if(ctx.Projects.Any(p=>p.Name==SolutionName && p.Path.StartsWith(WorkingDirectory)))
+        {
+            NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Error,
+                        Summary = $"Erro",
+                        Detail = $"Solution with Name {SolutionName} is exists in the Path {WorkingDirectory}"
+                    });
+
+            return;
+        }
         _ = await Cli.Wrap("mma")
             .WithWorkingDirectory(WorkingDirectory)
             .WithArguments(a => a.Add("new")
@@ -247,8 +272,9 @@
                 <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
                     <div class="form-group">
                         <RadzenLabel>Solution Name</RadzenLabel>
-                        <RadzenTextBox @bind-Value="SolutionName"
+                        <RadzenTextBox @bind-Value="SolutionName" Name="SolutionName"
                                        Style="width: 100%; max-width: 400px;"/>
+                <RadzenRequiredValidator Component="SolutionName" Text="Enter Solution Name" />
                     </div>
                     <div class="form-group">
                         <RadzenLabel>Mapper Package</RadzenLabel>

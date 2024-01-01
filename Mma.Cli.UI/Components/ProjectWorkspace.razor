@@ -5,7 +5,8 @@
                     EntityName="@entity.EntityName"
                     PkType="@entity.PkType"
                     Applied="@entity.Applied"
-                    Project="Project" />
+                    Project="Project" 
+                    OnEntityRemoved="@EntityRemoved"/>
     </div>
 }
 
@@ -18,11 +19,22 @@
 
     [Parameter]
     public List<RelationDto> Relations { get; set; } = new();
-    
-   
+
+    [Parameter]
+    public EventCallback<EntityModel> OnEntityRemoved { get; set; }
+
+
 
 
     private string entityName { get; set; } = "Table1";
     private string pkType { get; set; } = "Guid";
     private bool hasApi { get; set; } = true;
+
+    async Task EntityRemoved(string entityName)
+    {
+        var entity = Entities.First(e => e.EntityName == entityName);
+        Entities.Remove(entity);
+        StateHasChanged();
+        await OnEntityRemoved.InvokeAsync(entity);
+    }
 }
