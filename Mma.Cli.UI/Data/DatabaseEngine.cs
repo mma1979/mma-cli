@@ -70,6 +70,63 @@ ORDER BY
 
         }
 
+        public List<DatabaseScheme> ReadTablesScheme(string[] selectedTables)
+        {
+            var whereClue = $"('{string.Join("','", selectedTables)}')";
+            using var ad = new SqlDataAdapter(@$"SELECT 
+    SCHEMA_NAME(tab.schema_id) AS schema_name,
+    tab.name AS table_name,
+    col.column_id,
+    col.name AS column_name,
+    t.name AS data_type,
+    col.max_length,
+    col.precision,
+    col.is_nullable,
+    CASE WHEN fk.name IS NOT NULL THEN convert(bit, 1) ELSE CONVERT(bit, 0) END AS is_foreign_key
+FROM 
+    sys.tables AS tab
+    INNER JOIN sys.columns AS col ON tab.object_id = col.object_id
+    LEFT JOIN sys.types AS t ON col.user_type_id = t.user_type_id
+    LEFT JOIN (
+        SELECT 
+            fk.name,
+            tab.name AS table_name,
+            col.name AS column_name
+        FROM 
+            sys.foreign_keys AS fk
+            INNER JOIN sys.tables AS tab ON fk.parent_object_id = tab.object_id
+            INNER JOIN sys.columns AS col ON fk.parent_object_id = col.object_id
+    ) AS fk ON tab.name = fk.table_name AND col.name = fk.column_name
+WHERE 
+    tab.name NOT IN ('__EFMigrationsHistory', 'sysdiagrams', 'AppUsers', 'Attachments', 'ELMAH_Error', 'NotificationStatuses', 'NotificationTypes', 'Roles', 'SysSettings', 'Notifications', 'RefreshTokens', 'UserClaims', 'UserLogins', 'UserTokens', 'RoleClaims', 'UserRoles') AND
+    col.name NOT IN ('CreatedBy', 'CreatedDate', 'ModifiedBy', 'ModifiedDate', 'IsDeleted', 'DeletedBy', 'DeletedDate') AND tab.name IN {whereClue}
+ORDER BY 
+    schema_name,
+    table_name,
+    column_id;
+
+", ConnectionString);
+
+            using var dt = new DataTable();
+            ad.Fill(dt);
+
+            return dt.Rows.Cast<DataRow>()
+                .Select(r => new DatabaseScheme
+                {
+                    schema_name = r["schema_name"].ToString(),
+                    table_name = r["table_name"].ToString(),
+                    column_id = r["column_id"].ToString(),
+                    column_name = r["column_name"].ToString(),
+                    data_type = r["data_type"].ToString(),
+                    max_length = r["max_length"].ToString(),
+                    precision = r["precision"].ToString(),
+                    is_nullable = bool.Parse(r["is_nullable"].ToString()),
+                    is_foreign_key = bool.Parse(r["is_foreign_key"].ToString())
+
+                }).ToList();
+
+        }
+
         public List<RelationsScheme> ReadRelationsScheme()
         {
             using var ad = new SqlDataAdapter(@"SELECT
@@ -112,6 +169,48 @@ ORDER BY
 
         }
 
+        public List<RelationsScheme> ReadRelationsScheme(string[] selectedTables)
+        {
+            var whereClue = $"('{string.Join("','", selectedTables)}')";
+            using var ad = new SqlDataAdapter(@$"SELECT
+					--fk.name 'FK Name',
+					tp.name 'RelatedTableName',
+					cp.name 'ForeignKey', --cp.column_id,
+					tr.name 'CurrentTable',
+					t.name 'DataType'
+					--cr.name, cr.column_id
+				FROM 
+					sys.foreign_keys fk
+				INNER JOIN 
+					sys.tables tp ON fk.parent_object_id = tp.object_id
+				INNER JOIN 
+					sys.tables tr ON fk.referenced_object_id = tr.object_id
+				INNER JOIN 
+					sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+				INNER JOIN 
+					sys.columns cp ON fkc.parent_column_id = cp.column_id AND fkc.parent_object_id = cp.object_id
+				INNER JOIN 
+					sys.columns cr ON fkc.referenced_column_id = cr.column_id AND fkc.referenced_object_id = cr.object_id
+				INNER JOIN
+					sys.types t on t.system_type_id = cp.system_type_id and t.name <> 'sysname'
+
+				where tp.name NOT IN ('__EFMigrationsHistory', 'sysdiagrams', 'AppUsers', 'Attachments', 'ELMAH_Error', 'NotificationStatuses', 'NotificationTypes', 'Roles', 'SysSettings', 'Notifications', 'RefreshTokens', 'UserClaims', 'UserLogins', 'UserTokens', 'RoleClaims', 'UserRoles') and tp.name IN {whereClue}
+				ORDER BY
+					tp.name, cp.column_id", ConnectionString);
+
+            using var dt = new DataTable();
+            ad.Fill(dt);
+
+            return dt.Rows.Cast<DataRow>()
+                .Select(r => new RelationsScheme
+                {
+                    CurrentTable = r["CurrentTable"].ToString(),
+                    ForeignKey = r["ForeignKey"].ToString(),
+                    RelatedTableName = r["RelatedTableName"].ToString(),
+                    DataType = r["DataType"].ToString()
+                }).ToList();
+
+        }
         public Table GetTable(List<DatabaseScheme> scheme, List<RelationsScheme> relations)
         {
             var tableName = scheme.First().table_name;

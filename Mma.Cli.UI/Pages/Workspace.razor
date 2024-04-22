@@ -509,7 +509,7 @@
         {
             DatabaseEngine database = new(connString);
 
-            var tablesScheme = database.ReadTablesScheme();
+            List<DatabaseScheme> tablesScheme = database.ReadTablesScheme();
             if (!tablesScheme.Any())
             {
                 DialogService.Close(true);
@@ -523,11 +523,22 @@
 
                 return;
             }
-            var relationsScheme = database.ReadRelationsScheme();
 
-            var tablesList = tablesScheme.GroupBy(t => t.table_name)
+            var parameters = new Dictionary<string, object>();
+            parameters.Add("Tables", tablesScheme.Select(t=>t.table_name).Distinct());
+
+            string[] selectedTables = await DialogService.OpenAsync<SelectTablesDialog>("Select Tables", parameters);
+
+            List<DatabaseScheme> dbSchema = tablesScheme.Where(s => selectedTables.Contains(s.table_name)).ToList();
+
+           
+            List<RelationsScheme> relationsScheme = database.ReadRelationsScheme(selectedTables);
+
+            var tablesList = dbSchema.GroupBy(t => t.table_name)
                 .Select(t => database.GetTable(t.ToList(), relationsScheme))
                 .ToList();
+
+           
 
             Entities = tablesList.Select(t => new EntityModel()
                 {

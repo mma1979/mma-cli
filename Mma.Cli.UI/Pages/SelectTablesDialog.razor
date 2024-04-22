@@ -1,0 +1,46 @@
+﻿@inject DialogService DialogService
+
+<PageTitle> Select Tables </PageTitle>
+
+<RadzenColumn SizeMD=12>
+    <RadzenAlert Shade="Shade.Lighter" Variant="Variant.Flat" Size="AlertSize.Small" AlertStyle="AlertStyle.Danger" Visible="@errorVisible">You have not select any tables</RadzenAlert>
+
+    <RadzenStack>
+        <RadzenCheckBoxList Data="@Tables" TValue="string" Change="@OnChange" AllowSelectAll="true" Orientation="Orientation.Vertical"  SelectAllText="Select All"/>
+    </RadzenStack>
+
+    <RadzenStack style="margin-top:1rem;" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton ButtonStyle="ButtonStyle.Primary" Icon="power_settings_new" Text="Select" Variant="Variant.Flat" Click="@SelectButtonClick" />
+        <RadzenButton ButtonStyle="ButtonStyle.Light" Text="Cancel" Variant="Variant.Flat" Click="@CancelButtonClick" />
+    </RadzenStack>
+
+</RadzenColumn>
+
+@code {
+    bool errorVisible = false;
+    [Parameter]
+    public IEnumerable<string> Tables { get; set; } = new List<string>();
+    string[]? SelectedTables = [];
+
+    protected void SelectButtonClick(MouseEventArgs args)
+    {
+        if (SelectedTables?.Length <= 0)
+        {
+            errorVisible = true;
+            return;
+        }
+        errorVisible = false;
+        DialogService.Close(SelectedTables);
+    }
+
+    protected void CancelButtonClick(MouseEventArgs args)
+    {
+        errorVisible = false;
+        DialogService.Close(null);
+    }
+
+    protected void OnChange(IEnumerable<string>? values)
+    {
+        SelectedTables = values?.ToArray();
+    }
+}
