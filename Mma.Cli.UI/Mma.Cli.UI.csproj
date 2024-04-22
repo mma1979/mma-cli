@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>cli-ui</AssemblyName>
+    <AssemblyVersion>5.0.0.1</AssemblyVersion>
+    <Version>5.0.0-beat.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
