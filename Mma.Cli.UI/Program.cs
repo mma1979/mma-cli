@@ -49,6 +49,11 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseRouting();
+
+// app.MapRazorComponents<Mma.Cli.UI.App>()
+//    .AddInteractiveServerRenderMode()
+//    .AddAdditionalAssemblies(typeof(Mma.Cli.UI.App).Assembly);
+
 app.MapControllers();
 app.MapBlazorHub();
 app.MapFallbackToPage("/_Host");

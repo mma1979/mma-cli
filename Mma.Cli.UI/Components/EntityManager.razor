@@ -1,0 +1,83 @@
+﻿@inject DialogService DialogService
+<RadzenStack Gap="1.5rem">
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" AlignItems="AlignItems.Start" JustifyContent="JustifyContent.SpaceBetween">
+        <div class="form-group">
+            <RadzenLabel>Entity Name</RadzenLabel>
+            <RadzenTextBox @bind-Value="EntityModel.EntityName"
+                           Style="width: 100%; max-width: 400px;" />
+        </div>
+        <div class="form-group">
+            <RadzenLabel>PK Type</RadzenLabel>
+            <RadzenDropDown @bind-Value="@EntityModel.PkType"
+                            Data="@DataTypes"
+                            Style="width: 100%; max-width: 400px;"
+                            AllowFiltering="true" />
+        </div>
+        <div class="form-group">
+            <RadzenLabel Text="Generate API Controller" />
+            <RadzenButton ButtonStyle="@ButtonStyle.Primary"
+                          Shade="Shade.Lighter"
+                          Click="() => EntityModel.HasApi = !EntityModel.HasApi">
+
+                <RadzenBadge BadgeStyle="@(EntityModel.HasApi ? BadgeStyle.Success : BadgeStyle.Danger)"
+                             Text="@(EntityModel.HasApi ? "YES" : "NO")" Shade="Shade.Lighter" />
+            </RadzenButton>
+        </div>
+        <div class="form-group">
+            <RadzenLabel Text="Generate Admin Page" />
+            <RadzenButton ButtonStyle="@ButtonStyle.Primary"
+                          Shade="Shade.Lighter"
+                          Click="() => EntityModel.HasAdminPage = !EntityModel.HasAdminPage">
+
+                <RadzenBadge BadgeStyle="@(EntityModel.HasAdminPage ? BadgeStyle.Success : BadgeStyle.Danger)"
+                             Text="@(EntityModel.HasAdminPage ? "YES" : "NO")" Shade="Shade.Lighter" />
+            </RadzenButton>
+        </div>
+    </RadzenStack>
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+        <span>Fields</span>
+        <EntityFields EntityModel="@EntityModel"
+                      DataTypes="@DataTypes"/>
+    </RadzenStack>
+
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+        <span>Relations</span>
+        <EntityRelations 
+            EntityModel="EntityModel"
+                         Entities="Entities"
+                         Relations="Relations" />
+    </RadzenStack>
+
+    <RadzenStack Orientation="Orientation.Horizontal">
+        <RadzenButton Text="Ok" Click="()=>AddEntity()" Style="width: 80px;" />
+        <RadzenButton Text="Cancel" Click="() => DialogService.Close(null)" ButtonStyle="ButtonStyle.Light" />
+    </RadzenStack>
+
+</RadzenStack>
+@code {
+    public EntityModel? EntityModel { get; set; } = new();
+
+
+    [Parameter]
+    public ProjectModel Project { get; set; } = new();
+
+    [Parameter]
+    public List<string> DataTypes { get; set; } = [];
+
+    [Parameter]
+    public List<EntityModel> Entities { get; set; } = new();
+
+    [Parameter]
+    public List<RelationDto> Relations { get; set; } = new();
+
+    [Parameter]
+    public EventCallback<string> OnEntityRemoved { get; set; }
+
+
+    private void AddEntity() => DialogService.Close(EntityModel);
+
+    async Task EntityRemoved(string entityName)
+    {
+        await OnEntityRemoved.InvokeAsync(entityName);
+    }
+}

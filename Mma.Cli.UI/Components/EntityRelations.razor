@@ -1,0 +1,163 @@
+﻿@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<RadzenStack Gap="1.5rem">
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" AlignItems="AlignItems.Start" JustifyContent="JustifyContent.SpaceBetween">
+        <RadzenDataGrid AllowFiltering="false" FilterPopupRenderMode="PopupRenderMode.OnDemand"
+                        FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" AllowPaging="false"
+                        AllowSorting="false" Data="@Relations" TItem="RelationDto"
+                        @ref="Grid" Style="width:90%">
+            <HeaderTemplate>
+                <RadzenButton ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
+                              Icon="add_circle_outline"
+                              Text="Add" Click="@InsertRelationRow" Disabled="@(RowToInsert != null)" />
+            </HeaderTemplate>
+            <Columns>
+
+                <RadzenDataGridColumn TItem="RelationDto" Property="ChiledEntityName" Title="Child" Width="40%">
+                    <EditTemplate Context="row">
+                        <RadzenDropDown @bind-Value="row.ChiledEntityName" Data="@Entities"
+                                        ValueProperty="EntityName" TextProperty="EntityName"
+                                        Style="width:100%; display: block;"
+                                        AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" />
+                    </EditTemplate>
+                </RadzenDataGridColumn>
+
+
+                <RadzenDataGridColumn TItem="RelationDto" Context="row" Filterable="false" Sortable="false"
+                                      TextAlign="TextAlign.Right" Width="20%">
+                    <Template Context="row">
+
+                        <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat"
+                                      Shade="Shade.Lighter" Size="ButtonSize.Medium" class="my-1 ms-1"
+                                      Click="@(args => DeleteRelation(row))" @onclick:stopPropagation="true">
+                        </RadzenButton>
+                    </Template>
+                    <EditTemplate Context="row">
+                        <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Variant="Variant.Flat"
+                                      Size="ButtonSize.Medium" Click="@((args) => SaveRelation(row))">
+                        </RadzenButton>
+                        <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                                      Size="ButtonSize.Medium" class="my-1 ms-1" Click="@((args) => CancelEdit(row))">
+                        </RadzenButton>
+                       
+                    </EditTemplate>
+                </RadzenDataGridColumn>
+
+            </Columns>
+        </RadzenDataGrid>
+    </RadzenStack>
+
+
+</RadzenStack>
+
+@code {
+    [Parameter]
+    public EntityModel EntityModel { get; set; } = new();
+
+    [Parameter]
+    public List<EntityModel> Entities { get; set; } = new();
+
+    [Parameter]
+    public List<RelationDto> Relations { get; set; } = new();
+
+    RadzenDataGrid<RelationDto>? Grid;
+    RelationDto? RowToInsert;
+
+
+    async Task InsertRelationRow()
+    {
+        RowToInsert = new();
+        await Grid!.InsertRow(RowToInsert);
+    }
+
+    void Reset()
+    {
+        RowToInsert = null;
+    }
+
+    async Task DeleteRelation(RelationDto row)
+    {
+
+        Reset();
+
+        if (Relations.Contains(row))
+        {
+            Relations.Remove(row);
+            EntityModel!.
+            ParentRelations?.
+            RemoveAll(e => e.ChildId == row.ChildId);
+        }
+        else
+        {
+            Grid!.CancelEditRow(row);
+        }
+
+
+        NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = $"Success",
+                Detail = "Relation Removed successfully"
+            });
+
+        await Grid!.Reload();
+    }
+
+    async Task SaveRelation(RelationDto dto)
+    {
+        var parent = EntityModel;
+
+        var child = Entities
+            .First(e => e.EntityName == dto.ChiledEntityName);
+
+        RelationDto row = new()
+            {
+                ChildId = child.Id,
+                ChiledEntityName = child.EntityName,
+                Name = $"{dto.ParentEntityName}_{dto.ChiledEntityName}_{dto.ParentEntityName}Id",
+                ParentId = parent.Id,
+                ParentEntityName = parent.EntityName,
+                Applied = false,
+                PkType = parent.PkType
+            };
+        EntityModel.ParentRelations ??= new();
+        EntityModel.ParentRelations.Add(new()
+            {
+                ChildId = child.Id,
+                Name = $"{dto.ParentEntityName}_{dto.ChiledEntityName}_{dto.ParentEntityName}Id",
+                ParentId = parent.Id,
+                Applied = false,
+            });
+
+       // child.Rows.Add(new()
+       //      {
+       //          ColumnName = $"{row.ParentEntityName}Id",
+       //          DataType = row.PkType,
+       //          Nullable = true,
+       //          IsForeignKey = true,
+       //          Applied = true,
+       //          EntityId = row.ChildId
+       //      });
+       
+
+        await Grid!.UpdateRow(dto);
+        StateHasChanged();
+        Reset();
+
+        NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = $"Success",
+                Detail = "Relation Created successfully"
+            });
+    }
+
+    void CancelEdit(RelationDto row)
+    {
+        Reset();
+        Grid!.CancelEditRow(row);
+    }
+
+    
+}

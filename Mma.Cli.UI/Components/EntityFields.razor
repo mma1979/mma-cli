@@ -1,0 +1,155 @@
+﻿@inject NotificationService NotificationService
+
+<RadzenDataGrid AllowFiltering="false" FilterPopupRenderMode="PopupRenderMode.OnDemand"
+                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" AllowPaging="false"
+                AllowSorting="false" Data="@EntityModel.Rows" TItem="EntityRowModel"
+                SelectionMode="DataGridSelectionMode.Single" @bind-Value="@SelectedRows"
+                @ref="Grid" Style="width:90%">
+    <HeaderTemplate>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10" JustifyContent="JustifyContent.SpaceBetween">
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10" JustifyContent="JustifyContent.Left" Style="float:left">
+                <RadzenLabel Text="@EntityModel.EntityName" />
+                <RadzenBadge Text="@EntityModel.PkType" BadgeStyle="BadgeStyle.Danger"
+                             Shade="Shade.Lighter" />
+            </RadzenStack>
+
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="10" JustifyContent="JustifyContent.End" Style="float: right">
+                <RadzenButton ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
+                              Icon="add_circle_outline"
+                              Text="Add" Click="@InsertRow" Disabled="@(RowToInsert != null)" />
+                <span>&nbsp;</span>
+            </RadzenStack>
+
+        </RadzenStack>
+    </HeaderTemplate>
+    <Columns>
+        <RadzenDataGridColumn TItem="EntityRowModel" Property="ColumnName" Title="Column Name" Width="40%">
+            <EditTemplate Context="row">
+                <RadzenTextBox @bind-Value="row.ColumnName" Style="width: 100%" Name="ColumnName" />
+                <RadzenRequiredValidator Component="ColumnName" Text="Enter column name" />
+            </EditTemplate>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="EntityRowModel" Property="DataType" Title="Data Type" Width="30%">
+            <EditTemplate Context="row">
+                <RadzenDropDown @bind-Value="row.DataType" Data="@DataTypes"
+                                Style="width:100%; display: block;"
+                                AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" />
+            </EditTemplate>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="EntityRowModel" Property="Nullable" Title="Nullable?" Width="10%">
+            <Template Context="row">
+                <RadzenCheckBox @bind-Value="row.Nullable" Disabled="true"></RadzenCheckBox>
+            </Template>
+            <EditTemplate Context="row">
+                <RadzenCheckBox @bind-Value="row.Nullable"></RadzenCheckBox>
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+        <RadzenDataGridColumn TItem="EntityRowModel" Context="row" Filterable="false" Sortable="false"
+                              TextAlign="TextAlign.Right" Width="20%">
+            <Template Context="row">
+
+                <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat"
+                              Shade="Shade.Lighter" Size="ButtonSize.Medium" class="my-1 ms-1"
+                              Click="@(args => DeleteRow(row))" @onclick:stopPropagation="true">
+                </RadzenButton>
+            </Template>
+            <EditTemplate Context="row">
+                <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Variant="Variant.Flat"
+                              Size="ButtonSize.Medium" Click="@((args) => SaveRow(row))">
+                </RadzenButton>
+                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                              Size="ButtonSize.Medium" class="my-1 ms-1" Click="@((args) => CancelEdit(row))">
+                </RadzenButton>
+                @* <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat"  *@
+                @*               Shade="Shade.Lighter" Size="ButtonSize.Medium" class="my-1 ms-1" Click="@(args => DeleteRow(row))"> *@
+                @* </RadzenButton> *@
+            </EditTemplate>
+        </RadzenDataGridColumn>
+
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [Parameter]
+    public EntityModel EntityModel { get; set; } = new();
+
+    [Parameter]
+    public List<string> DataTypes { get; set; } = [];
+
+    EntityRowModel? RowToInsert;
+    RadzenDataGrid<EntityRowModel>? Grid;
+    IList<EntityRowModel>? SelectedRows;
+
+    void Reset()
+    {
+        RowToInsert = null;
+    }
+
+    async Task InsertRow()
+    {
+        RowToInsert = new() { DataType = "Guid" };
+        await Grid!.InsertRow(RowToInsert);
+    }
+
+    void CancelEdit(EntityRowModel row)
+    {
+        Reset();
+        Grid!.CancelEditRow(row);
+    }
+
+    async Task DeleteRow(EntityRowModel row)
+    {
+        Reset();
+
+        if (EntityModel.Rows.Contains(row))
+        {
+            EntityModel.Rows.Remove(row);
+            await Grid!.Reload();
+        }
+        else
+        {
+            Grid!.CancelEditRow(row);
+            await Grid.Reload();
+        }
+    }
+
+    async Task SaveRow(EntityRowModel row)
+    {
+        if (EntityModel.Rows!.Any(r => r.ColumnName == row.ColumnName))
+        {
+            NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = $"Erro",
+                    Detail = $"Column with name {row.ColumnName} already exists"
+                });
+
+            return;
+        }
+
+        if (string.IsNullOrEmpty(row.ColumnName))
+        {
+            NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = $"Erro",
+                    Detail = $"Enter column name"
+                });
+
+            return;
+        }
+        
+        EntityModel.Rows ??= new();
+        EntityModel.Rows.Add(new()
+            {
+                ColumnName = row.ColumnName,
+                DataType = row.DataType,
+                Nullable = row.Nullable,
+                Applied = false
+            });
+
+        await Grid!.UpdateRow(row);
+        Reset();
+    }
+}

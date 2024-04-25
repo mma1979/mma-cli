@@ -71,10 +71,10 @@
                 <ProjectWorkspace Project="Project"
                                   Entities="Entities"
                                   Relations="Relations" 
-                                  OnEntityRemoved="@EntityRemoved"/>
+                                  OnEntityRemoved="()=>EntityRemoved(EntityModel.EntityName)"/>
             </div>
 
-            <RadzenDialog />
+            
             <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Large" Visible="false">
                 <Template>Wait</Template>
             </RadzenProgressBarCircular>
@@ -85,6 +85,7 @@
 </div>
 
 <RadzenNotification />
+<RadzenDialog @rendermode="@RenderMode.InteractiveServer" />
 
 @code {
 
@@ -132,43 +133,26 @@
 
     protected async Task ShowAddTable()
     {
-        var result = await DialogService.OpenAsync("Add Entity", ds =>
-    @<RadzenStack Gap="1.5rem">
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" AlignItems="AlignItems.Start" JustifyContent="JustifyContent.SpaceBetween">
-            <div class="form-group">
-                <RadzenLabel>Entity Name</RadzenLabel>
-                <RadzenTextBox @bind-Value="EntityModel.EntityName"
-                               Style="width: 100%; max-width: 400px;" />
-            </div>
-            <div class="form-group">
-                <RadzenLabel>PK Type</RadzenLabel>
-                <RadzenDropDown @bind-Value="@EntityModel.PkType"
-                                Data="@DataTypes"
-                                Style="width: 100%; max-width: 400px;"
-                                AllowFiltering="true" />
-            </div>
-            <div class="form-group">
-                <RadzenLabel Text="Generate API Controller" />
-                <RadzenButton ButtonStyle="@ButtonStyle.Primary"
-                              Shade="Shade.Lighter"
-                              Click="() => EntityModel.HasApi = !EntityModel.HasApi">
+        Dictionary<string, object> parameters = new();
+        parameters.Add("DataTypes", DataTypes);
+        parameters.Add("Project", Project);
+        parameters.Add("Entities", Entities);
+        parameters.Add("Relations", Relations);
 
-                    <RadzenBadge BadgeStyle="@(EntityModel.HasApi ? BadgeStyle.Success : BadgeStyle.Danger)"
-                                 Text="@(EntityModel.HasApi ? "YES" : "NO")" Shade="Shade.Lighter" />
-                </RadzenButton>
-            </div>
-        </RadzenStack>
+        EntityModel? model = await DialogService.OpenSideAsync<EntityManager>("Manage Entity", parameters: parameters, options: new SideDialogOptions { CloseDialogOnOverlayClick = false, Style = "overflow:visible;top:50px; min-width: 650px", Position = DialogPosition.Right });
 
-        <RadzenStack Orientation="Orientation.Horizontal">
-            <RadzenButton Text="Ok" Click="() => AddEntity(ds)" Style="width: 80px;" />
-            <RadzenButton Text="Cancel" Click="() => ds.Close(false)" ButtonStyle="ButtonStyle.Light" />
-        </RadzenStack>
+        if(model is null)
+        {
+            DialogService.Close(null);
+            return;
+        }
 
-    </RadzenStack>
-    , new DialogOptions() { ShowTitle = true, Style = "max-width: 375px" });
+        EntityModel = model;
+        await AddEntity();
+
     }
 
-    private async Task AddEntity(DialogService ds)
+    private async Task AddEntity()
     {
         if (Entities!.Any(e => e.EntityName == EntityModel.EntityName))
         {
@@ -188,7 +172,6 @@
 
         EntityModel = new();
         ctx.DumpProject(ProjectId, Project!.Path);
-        ds.Close(true);
 
         StateHasChanged();
         NotificationService.Notify(new NotificationMessage
@@ -531,14 +514,14 @@
 
             List<DatabaseScheme> dbSchema = tablesScheme.Where(s => selectedTables.Contains(s.table_name)).ToList();
 
-           
+
             List<RelationsScheme> relationsScheme = database.ReadRelationsScheme(selectedTables);
 
             var tablesList = dbSchema.GroupBy(t => t.table_name)
                 .Select(t => database.GetTable(t.ToList(), relationsScheme))
                 .ToList();
 
-           
+
 
             Entities = tablesList.Select(t => new EntityModel()
                 {
@@ -649,10 +632,11 @@
 
     }
 
-    private async void EntityRemoved(EntityModel entity)
+    private async void EntityRemoved(string entityName)
     {
-        Entities?.Remove(entity);
-        await CliData.RemoveEntity(entity);
+        Console.WriteLine(entityName);
+        // Entities?.Remove(entity);
+        // await CliData.RemoveEntity(entity);
         StateHasChanged();
     }
 }

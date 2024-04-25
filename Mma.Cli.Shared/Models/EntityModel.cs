@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -14,6 +15,8 @@ namespace Mma.Cli.Shared.Models
         public string PkType { get; set; } = "Guid";
 
         public bool HasApi { get; set; } = true;
+        [NotMapped]
+        public bool HasAdminPage { get; set; } = false;
         public int? ProjectId { get; set; }
 
         public bool Applied { get; set; } = false;
