@@ -20,8 +20,8 @@
     <ProjectReference Include="..\Mma.Cli.Shared\Mma.Cli.Shared.csproj" />
   </ItemGroup>
 
-  <Target Name="Mapster" AfterTargets="AfterBuild">
+  <!--<Target Name="Mapster" AfterTargets="AfterBuild">
     <Exec WorkingDirectory="$(ProjectDir)" Command="$(ProjectDir)after-build.bat" />
-  </Target>
+  </Target>-->
 
 </Project>

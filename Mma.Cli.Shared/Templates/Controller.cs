@@ -23,8 +23,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using $SolutionName.AppApi.Infrastrcture;
 
-namespace $SolutionName.AppAPI.Controllers
+namespace $SolutionName.AppApi.Controllers
 {
     [Route(""api/[controller]"")]
     [ApiController]
@@ -44,6 +45,7 @@ namespace $SolutionName.AppAPI.Controllers
 
 
         [HttpGet]
+		[RequiredPermission(""Read"")]
         public async Task<ActionResult<ResultViewModel<List<$EntityNameDto>>>> GetAll([FromQuery] QueryViewModel query, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
@@ -82,6 +84,7 @@ namespace $SolutionName.AppAPI.Controllers
         }
 
         [HttpGet(""{id}"")]
+		[RequiredPermission(""Read"")]
         public async Task<ActionResult<ResultViewModel<$EntityNameDto>>> GetOne($PK id, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
@@ -124,6 +127,7 @@ namespace $SolutionName.AppAPI.Controllers
 
 
         [HttpPost]
+		[RequiredPermission(""Create"")]
         public async Task<ActionResult<ResultViewModel<$EntityNameDto>>> Post$EntityName([FromBody] $EntityNameDto model, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
@@ -163,6 +167,7 @@ namespace $SolutionName.AppAPI.Controllers
         }
 
         [HttpPut(""{id}"")]
+		[RequiredPermission(""Update"")]
         public async Task<ActionResult<ResultViewModel<$EntityNameDto>>> Put$EntityName($PK id, [FromBody] $EntityNameDto model, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
@@ -209,6 +214,7 @@ namespace $SolutionName.AppAPI.Controllers
         }
 
         [HttpDelete(""{id}"")]
+		[RequiredPermission(""Update,Delete"")]
         public async Task<ActionResult<ResultViewModel<$EntityNameDto>>> Delete$EntityName($PK id, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
