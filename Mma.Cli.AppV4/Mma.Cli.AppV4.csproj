@@ -2,27 +2,28 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <LangVersion>Preview</LangVersion>
 
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mma</ToolCommandName>
     <PackageOutputPath>./nupkg</PackageOutputPath>
-    <FileVersion>7.0.0</FileVersion>
+    <FileVersion>8.0.0</FileVersion>
     <RootNamespace>$(MSBuildProjectName.Replace(" ", "_"))</RootNamespace>
     <AssemblyName>mma-cli</AssemblyName>
-    <AssemblyVersion>4.1.2</AssemblyVersion>
-    <Version>4.1.2</Version>
-    <PackageVersion>4.1.2</PackageVersion>
+    <AssemblyVersion>4.2.1</AssemblyVersion>
+    <Version>4.2.1</Version>
+    <PackageVersion>4.2.1</PackageVersion>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <PackageIconUrl>https://i.imgur.com/wxeEDiY.png</PackageIconUrl>
   </PropertyGroup>
 
   
   <ItemGroup>
-    <PackageReference Include="CliWrap" Version="3.6.4" />
+    <PackageReference Include="CliWrap" Version="3.6.6" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="RestSharp" Version="110.2.0" />
+    <PackageReference Include="RestSharp" Version="111.4.1" />
     <PackageReference Include="Sharprompt" Version="2.4.5" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
   </ItemGroup>
@@ -30,7 +31,6 @@
   <ItemGroup>
     <Folder Include="nupkg\" />
     <Folder Include="UI\" />
-    <Folder Include="docs\" />
   </ItemGroup>
 
   <ItemGroup>

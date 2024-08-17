@@ -7,6 +7,10 @@ using Mma.Cli.Shared.Helpers;
 using Mma.Cli.Shared.Models;
 using Mma.Cli.UI.Models;
 
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
 namespace Mma.Cli.UI.Data
 {
     public class CliData
@@ -46,6 +50,7 @@ namespace Mma.Cli.UI.Data
 
         public async Task<EntityModel> AddEntity(EntityModel model)
         {
+
             var record = await _context.Entities.AddAsync(model);
             await _context.SaveChangesAsync();
             return record.Entity;
@@ -119,5 +124,13 @@ namespace Mma.Cli.UI.Data
 
             return true;
         }
+
+        public async Task<bool> RemoveEntity(EntityModel entity)
+        {
+            EntityModel? model = await _context.Entities
+                .FirstOrDefaultAsync(e => e.ProjectId == entity.ProjectId && e.EntityName == entity.EntityName);
+            _context.Entities .Remove(model!);
+            return (await _context.SaveChangesAsync()) > 0;
+        } 
     }
 }

@@ -1,5 +1,8 @@
 ﻿using Mma.Cli.Shared.Consts;
 using Mma.Cli.Shared.Helpers;
+using Mma.Cli.Shared.Templates;
+using Mma.Cli.Shared.Templates.AutoMapper;
+using Mma.Cli.Shared.Templates.Mappster;
 
 using System;
 using System.Collections.Generic;
@@ -96,7 +99,7 @@ namespace Mma.Cli.Shared.Builders
 
             using StreamWriter writer = new(path);
             writer.Write(
-                Templates.DtoTemplate.Template
+               (Mapper is Mappers.Mapster? MappsterDtoTemplate.Template : DtoTemplate.Template)
                     .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
                     .Replace("$PK", PkType)
@@ -221,7 +224,7 @@ namespace Mma.Cli.Shared.Builders
 
             using StreamWriter writer = new(path);
             writer.Write(
-                Templates.EntityConfig.Template
+                (Mapper is Mappers.Mapster? MappsterEntityConfig.Template : EntityConfig.Template)
                     .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
                     .Replace("$EntitySetName", entitySetName)
@@ -268,7 +271,7 @@ namespace Mma.Cli.Shared.Builders
                 var last = ls.Last(l => l.Contains("modelBuilder.ApplyConfiguration(new"));
                 var idx = ls.IndexOf(last);
                 ls.Insert(idx + 1,
-                    Templates.ConfigEntry.Template
+                    ConfigEntry.Template
                         .Replace("$EntityName", ComponentName));
             }
 
@@ -332,8 +335,8 @@ namespace Mma.Cli.Shared.Builders
 
             using StreamWriter writer = new(path);
             writer.Write(
-                Templates.Controller.Template
-                    .Replace("$SolutionName", SolutionName)
+               (Mapper is Mappers.Mapster? MappsterController.Template:Controller.Template)
+               .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
                     .Replace("$EntityVarName", entityNameVar)
                     .Replace("$EntitySetName", entitySetName)

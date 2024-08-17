@@ -1,8 +1,9 @@
 # MMA CLI
 
 ![build and test](https://img.shields.io/github/actions/workflow/status/abpframework/abp/build-and-test.yml?branch=dev&style=flat-square)
-[![NuGet](https://img.shields.io/badge/nugett-v4.1.2-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
+[![NuGet](https://img.shields.io/badge/nugett-v4.2.1-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
 
+![MMA cli](https://i.imgur.com/wxeEDiY.png)
 
 ```
 .___  ___. .___  ___.      ___      
@@ -19,7 +20,7 @@ MMA Cli is a complete **Code Generator** based on **ASP.NET Core** to create **m
 # Change Log:
 - Improved migration process and enrich with notifications
 - Databse first mode has been added to `UI` mode using `Import form Database' option
-![image](https://i.imgur.com/ZqG95uM.png)
+![MMA cli UI](https://i.imgur.com/ZqG95uM.png)
 
 
 ## Getting Started
@@ -157,14 +158,14 @@ Also you can use UI mode to create and manage your solutions. Select `UI` from `
 mma ui
 ````
 
-![image](https://imgur.com/wE6nXWF.png)
+![UI Screen 1](https://imgur.com/wE6nXWF.png)
 
-![image](https://i.imgur.com/ARweSJu.png)
+![UI Screen 2](https://i.imgur.com/ARweSJu.png)
 
-![image](https://i.imgur.com/5BxbvkC.png)
+![UI Screen 3](https://i.imgur.com/5BxbvkC.png)
 
-![image](https://i.imgur.com/iMnGJcx.png)
+![UI Screen 4](https://i.imgur.com/iMnGJcx.png)
 
-![image](https://i.imgur.com/eYiSLBS.png)
+![UI Screen 5](https://i.imgur.com/eYiSLBS.png)
 
-![image](https://i.imgur.com/CS8PQE2.png)
+![UI Screen 6](https://i.imgur.com/CS8PQE2.png)

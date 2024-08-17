@@ -70,7 +70,8 @@
             <div class="col-md-12">
                 <ProjectWorkspace Project="Project"
                                   Entities="Entities"
-                                  Relations="Relations" />
+                                  Relations="Relations" 
+                                  OnEntityRemoved="@EntityRemoved"/>
             </div>
 
             <RadzenDialog />
@@ -164,17 +165,29 @@
         </RadzenStack>
 
     </RadzenStack>
-        , new DialogOptions() { ShowTitle = true, Style = "max-width: 375px" });
+    , new DialogOptions() { ShowTitle = true, Style = "max-width: 375px" });
     }
 
     private async Task AddEntity(DialogService ds)
     {
+        if (Entities!.Any(e => e.EntityName == EntityModel.EntityName))
+        {
+            NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Error,
+                        Summary = $"Erro",
+                        Detail = $"Entity {EntityModel.EntityName} already exists"
+                    });
+
+            return;
+        }
+
         EntityModel.ProjectId = ProjectId;
         var entity = await CliData.AddEntity(EntityModel);
-        Entities.Add(entity);
+        Entities!.Add(entity);
 
         EntityModel = new();
-        ctx.DumpProject(ProjectId, Project.Path);
+        ctx.DumpProject(ProjectId, Project!.Path);
         ds.Close(true);
 
         StateHasChanged();
@@ -623,5 +636,12 @@
                 Applied = false,
             };
 
+    }
+
+    private async void EntityRemoved(EntityModel entity)
+    {
+        Entities?.Remove(entity);
+        await CliData.RemoveEntity(entity);
+        StateHasChanged();
     }
 }
