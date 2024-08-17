@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Mma.Cli.Shared.Templates
 {
-    public static class DtoTemplate
+    public static class MappsterDtoTemplate
     {
         public static string Template = @"using System;
 using System.Collections.Generic;

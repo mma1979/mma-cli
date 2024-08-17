@@ -7,6 +7,10 @@ using Mma.Cli.Shared.Helpers;
 using Mma.Cli.Shared.Models;
 using Mma.Cli.UI.Models;
 
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
 namespace Mma.Cli.UI.Data
 {
     public class CliData

@@ -1,5 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
+using System.Collections.Generic;
+
 namespace Mma.Cli.UI.Models
 {
     public class Table

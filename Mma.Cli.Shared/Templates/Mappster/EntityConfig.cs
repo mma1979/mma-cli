@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Mma.Cli.Shared.Templates
+namespace Mma.Cli.Shared.Templates.Mappster
 {
-    public static class EntityConfig
+    public static class MappsterEntityConfig
     {
         public const string Template = @"using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Mma.Cli.Shared.Templates
+namespace Mma.Cli.Shared.Templates.AutoMapper
 {
     public static class Controller
     {

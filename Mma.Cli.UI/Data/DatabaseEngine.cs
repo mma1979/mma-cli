@@ -3,7 +3,9 @@
 using Mma.Cli.Shared.Consts;
 using Mma.Cli.UI.Models;
 
+using System.Collections.Generic;
 using System.Data;
+using System.Linq;
 
 namespace Mma.Cli.UI.Data
 {
