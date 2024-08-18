@@ -46,7 +46,7 @@ namespace $SolutionName.AppApi.Controllers
 
         [HttpGet]
 		[RequiredPermission(""Read"")]
-        public async Task<ActionResult<ResultViewModel<List<$EntityNameDto>>>> GetAll([FromQuery] QueryViewModel query, CancellationToken cancellationToken)
+        public async Task<IActionResult> GetAll([FromQuery] QueryViewModel query, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
             {
@@ -56,7 +56,7 @@ namespace $SolutionName.AppApi.Controllers
                     Messages = new[] { ""Request has been canceled"" }
                 });
             }
-            var result = new ResultViewModel<List<$EntityNameDto>>();
+            
             try
             {
                 query.UserId = UserId;
@@ -71,21 +71,23 @@ namespace $SolutionName.AppApi.Controllers
             catch (HttpException ex)
             {
                 _logger.LogError(ex.Message, query, ex);
-                return BadRequest(HandleHttpException<List<$EntityNameDto>>(ex));
+                return BadRequest(HandleHttpException<List<$EntityNameReadModel>>(ex));
             }
             catch (Exception ex)
             {
 
                 _logger.LogError(ex.Message, ex);
-                result.IsSuccess = false;
-                result.StatusCode = 500;
+				var result = new ResultViewModel<List<$EntityNameDto>>{
+					IsSuccess = false,
+					StatusCode = 500
+				};
                 return BadRequest(result);
             }
         }
 
         [HttpGet(""{id}"")]
 		[RequiredPermission(""Read"")]
-        public async Task<ActionResult<ResultViewModel<$EntityNameDto>>> GetOne($PK id, CancellationToken cancellationToken)
+        public async Task<IActionResult> GetOne($PK id, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
             {
@@ -95,7 +97,7 @@ namespace $SolutionName.AppApi.Controllers
                     Messages = new[] { ""Request has been canceled"" }
                 });
             }
-            var result = new ResultViewModel<$EntityNameDto>();
+            
             try
             {
                 var data = await _$EntityVarNameService.Find(id);
@@ -112,14 +114,16 @@ namespace $SolutionName.AppApi.Controllers
             {
 
                 _logger.LogError(ex.Message, ex);
-                return BadRequest(HandleHttpException<$EntityNameDto>(ex));
+                return BadRequest(HandleHttpException<$EntityNameReadModel>(ex));
             }
             catch (Exception ex)
             {
 
                 _logger.LogError(ex.Message, ex);
-                result.IsSuccess = false;
-                result.StatusCode = 500;
+               var result = new ResultViewModel<List<$EntityNameReadModel>>{
+					IsSuccess = false,
+					StatusCode = 500
+				};
                 return BadRequest(result);
             }
         }
@@ -128,7 +132,7 @@ namespace $SolutionName.AppApi.Controllers
 
         [HttpPost]
 		[RequiredPermission(""Create"")]
-        public async Task<ActionResult<ResultViewModel<$EntityNameDto>>> Post$EntityName([FromBody] $EntityNameDto model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Post$EntityName([FromBody] $EntityNameModifyModel model, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
             {
@@ -138,7 +142,7 @@ namespace $SolutionName.AppApi.Controllers
                     Messages = new[] { ""Request has been canceled"" }
                 });
             }
-            var result = new ResultViewModel<$EntityName>();
+           
             try
             {
                 var data = await _$EntityVarNameService.Add(model);
@@ -154,21 +158,24 @@ namespace $SolutionName.AppApi.Controllers
             {
 
                 _logger.LogError(ex.Message, ex);
-                return BadRequest(HandleHttpException<$EntityNameDto>(ex));
+                return BadRequest(HandleHttpException(ex));
             }
             catch (Exception ex)
             {
 
                 _logger.LogError(ex.Message, ex);
-                result.IsSuccess = false;
-                result.StatusCode = 500;
+				 var result = new AcknowledgeViewModel
+				 {
+					IsSuccess = false,
+					StatusCode = 500
+				 };
                 return BadRequest(result);
             }
         }
 
         [HttpPut(""{id}"")]
 		[RequiredPermission(""Update"")]
-        public async Task<ActionResult<ResultViewModel<$EntityNameDto>>> Put$EntityName($PK id, [FromBody] $EntityNameDto model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Put$EntityName($PK id, [FromBody] $EntityNameModifyModel model, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
             {
@@ -179,7 +186,7 @@ namespace $SolutionName.AppApi.Controllers
                 });
             }
 			
-            var result = new ResultViewModel<$EntityName>();
+            
             try
             {
                 if (model.Id != id)
@@ -201,21 +208,24 @@ namespace $SolutionName.AppApi.Controllers
             {
 
                 _logger.LogError(ex.Message, ex);
-                return BadRequest(HandleHttpException<$EntityNameDto>(ex));
+                return BadRequest(HandleHttpException(ex));
             }
             catch (Exception ex)
             {
 
                 _logger.LogError(ex.Message, ex);
-                result.IsSuccess = false;
-                result.StatusCode = 500;
+                var result = new AcknowledgeViewModel
+				 {
+					IsSuccess = false,
+					StatusCode = 500
+				 };
                 return BadRequest(result);
             }
         }
 
         [HttpDelete(""{id}"")]
 		[RequiredPermission(""Update,Delete"")]
-        public async Task<ActionResult<ResultViewModel<$EntityNameDto>>> Delete$EntityName($PK id, CancellationToken cancellationToken)
+        public async Task<IActionResult> Delete$EntityName($PK id, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
             {
@@ -226,7 +236,7 @@ namespace $SolutionName.AppApi.Controllers
                 });
             }
 			
-            var result = new ResultViewModel<$EntityNameDto>();
+            
             try
             {
                 var data = await _$EntityVarNameService.Delete(id);
@@ -242,14 +252,17 @@ namespace $SolutionName.AppApi.Controllers
             {
 
                 _logger.LogError(ex.Message, ex);
-                return BadRequest(HandleHttpException<$EntityNameDto>(ex));
+                return BadRequest(HandleHttpException(ex));
             }
             catch (Exception ex)
             {
 
                 _logger.LogError(ex.Message, ex);
-                result.IsSuccess = false;
-                result.StatusCode = 500;
+                var result = new AcknowledgeViewModel
+				 {
+					IsSuccess = false,
+					StatusCode = 500
+				 };
                 return BadRequest(result);
             }
         }
