@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Mma.Cli.Shared.Templates
 {
-    public static class Validator
+    public static class MapsterValidator
     {
         public const string Template = @"using FluentValidation;
 

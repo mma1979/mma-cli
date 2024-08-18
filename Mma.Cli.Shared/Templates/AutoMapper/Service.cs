@@ -46,11 +46,12 @@ namespace $SolutionName.Services
 
 
 
-        public async Task<ResultViewModel<List<$EntityNameDto>>> All(QueryViewModel query)
+        public async Task<ResultViewModel<List<$EntityNameReadModel>> All(QueryViewModel query)
         {
+			var cacheKey = $""$EntityName:GetAll_{query.GetHashCode()}"".GetHashCode().ToString();
             try
             {
-                var cached = _cacheService.Get<ResultViewModel<List<$EntityNameDto>>>($""$EntityName:GetAll_{query.GetHashCode()}"");
+                var cached = _cacheService.Get<ResultViewModel<List<$EntityNameReadModel>>>(cacheKey);
 
                 if (cached != null)
                 {
@@ -64,7 +65,7 @@ namespace $SolutionName.Services
                     data = data.Where(query.Filter);
                 }
 
-                query.Order = string.IsNullOrEmpty(query.Order) ? ""Id Desc"" : query.Order;
+                query.Order = string.IsNullOrEmpty(query.Order) ? ""CreatedDate Desc"" : query.Order;
                 data = data.OrderBy(query.Order);
 
                 var page = query.PageNumber <= 0 ? data :
@@ -74,7 +75,7 @@ namespace $SolutionName.Services
                 var count = await data.CountAsync();
                 var list = await page.ToListAsync();
 
-                var result = new ResultViewModel<List<$EntityNameDto>>
+                var result = new ()
                 {
                     IsSuccess = true,
                     StatusCode = 200,
@@ -83,10 +84,10 @@ namespace $SolutionName.Services
                     PageSize = query.PageSize,
                     PageNumber = query.PageNumber,
                     Filter = query.Filter,
-                    Data = _mapper.Map<List<$EntityNameDto>>(list)
+                    Data = _mapper.Map<List<$EntityNameReadModel>>(list)
                 };
 
-                _cacheService.Set($""$EntityName:GetAll_{query.GetHashCode()}"", result);
+                _cacheService.Set(cacheKey, result);
 
                 return result;
             }
@@ -94,7 +95,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<List<$EntityNameDto>>
+                return new ()
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -106,11 +107,12 @@ namespace $SolutionName.Services
             }
         }
 
-        public async Task<ResultViewModel<$EntityNameDto>> Find(Expression<Func<$EntityName, bool>> predicate)
+        public async Task<ResultViewModel<$EntityNameModifyModel>> Find(Expression<Func<$EntityName, bool>> predicate)
         {
+			vr cacheKey = $""$EntityName:Find_{predicate.Body}"".GetHashCode().ToString();
             try
             {
-                var cached = _cacheService.Get<ResultViewModel<$EntityNameDto>>($""$EntityName:Find_{predicate.Body}"");
+                var cached = _cacheService.Get<ResultViewModel<$EntityNameDto>>(cacheKey);
 
                 if (cached != null)
                 {
@@ -118,15 +120,15 @@ namespace $SolutionName.Services
                 }
 
                 var data = await _context.$EntitySetName.SingleOrDefaultAsync(predicate);
-                var result = new ResultViewModel<$EntityNameDto>
+                var result = new ()
                 {
                     IsSuccess = true,
                     StatusCode = 200,
                     Messages = { ""data loaded successfully"" },
-                    Data = _mapper.Map<$EntityNameDto>(data)
+                    Data = _mapper.Map<$EntityNameModifyModel>(data)
                 };
 
-                _cacheService.Set($""$EntityName:Find_{predicate.Body}"", result);
+                _cacheService.Set(cacheKey, result);
 
                 return result;
             }
@@ -134,7 +136,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -142,12 +144,13 @@ namespace $SolutionName.Services
                 };
             }
         }
-        public async Task<ResultViewModel<$EntityNameDto>> Find($PK id)
+        public async Task<ResultViewModel<$EntityNameModifyModel>> Find($PK id)
         {
+			var cacheKey = $""$EntityName:Find_{id}"".GetHashCode().ToString();
             try
             {
 
-                var cached = _cacheService.Get<ResultViewModel<$EntityNameDto>>($""$EntityName:Find_{id}"");
+                var cached = _cacheService.Get<ResultViewModel<$EntityNameDto>>(cacheKey);
 
                 if (cached != null)
                 {
@@ -155,7 +158,7 @@ namespace $SolutionName.Services
                 }
 
                 var data = await _context.$EntitySetName.FindAsync(id);
-                var result = new ResultViewModel<$EntityNameDto>
+                var result = new new()
                 {
                     IsSuccess = true,
                     StatusCode = 200,
@@ -163,7 +166,7 @@ namespace $SolutionName.Services
                     Data = _mapper.Map<$EntityNameDto>(data)
                 };
 
-                _cacheService.Set($""$EntityName:Find_{id}"", result);
+                _cacheService.Set(cacheKey, result);
 
                 return result;
             }
@@ -171,7 +174,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameDto>
+                return new new ()
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -181,19 +184,18 @@ namespace $SolutionName.Services
         }
 
 
-        public async Task<ResultViewModel<$EntityNameDto>> Add($EntityNameDto dto)
+        public async Task<AcknowledgeViewModel> Add($EntityNameModifyModel model)
         {
             try
             {
-                var tag = new $EntityName(dto);
-                var entity = await _context.$EntitySetName.AddAsync(tag);
+                var record = new $EntityName(model);
+                var entity = await _context.$EntitySetName.AddAsync(record);
                 _ = await _context.SaveChangesAsync();
 
                 _cacheService.Clear(""$EntityName:"");
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
 
-                    Data = _mapper.Map<$EntityNameDto>(entity.Entity),
                     IsSuccess = true,
                     StatusCode = 200,
                     Messages = { ""data saved successfully"" },
@@ -204,7 +206,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -213,16 +215,16 @@ namespace $SolutionName.Services
             }
         }
 
-        public async Task<ResultViewModel<$EntityNameDto>> Update($EntityNameDto dto)
+        public async Task<AcknowledgeViewModel> Update($EntityNameModifyModel model)
         {
             try
             {
-                var tag = await _context.$EntitySetName.FindAsync(dto.Id);
-                if (tag == null)
+                var record = await _context.$EntitySetName.FindAsync(dto.Id);
+                if (record == null)
                 {
                     var exp = new KeyNotFoundException($""item number {dto.Id} does not Exist"");
                     _logger.LogError(exp.Message, exp);
-                    return new ResultViewModel<$EntityNameDto>
+                    return new ()
                     {
                         IsSuccess = false,
                         StatusCode = 500,
@@ -231,18 +233,17 @@ namespace $SolutionName.Services
                 }
 
 
-                var entity = tag.Update(dto);
+                var entity = record.Update(dto);
 
                 _ = await _context.SaveChangesAsync();
 
                 _cacheService.Clear(""$EntityName:"");
 
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
                     IsSuccess = true,
                     StatusCode = 200,
-                    Messages = { ""data modified successfully"" },
-                    Data = _mapper.Map<$EntityNameDto>(entity)
+                    Messages = { ""data modified successfully"" }
                 };
 
             }
@@ -250,42 +251,41 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
-                    IsSuccess = true,
-                    StatusCode = 200,
+                    IsSuccess = false,
+                    StatusCode = 500,
                     Messages = { ""error while saving data"" },
                 };
             }
         }
 
-        public async Task<ResultViewModel<$EntityNameDto>> Delete($PK id)
+        public async Task<AcknowledgeViewModel> Delete($PK id)
         {
             try
             {
-                var tag = await _context.$EntitySetName.FindAsync(id);
-                if (tag == null)
+                var record = await _context.$EntitySetName.FindAsync(id);
+                if (record == null)
                 {
                     var exp = new KeyNotFoundException($""item number {id} does not Exist"");
                     _logger.LogError(exp.Message, exp);
-                    return new ResultViewModel<$EntityNameDto>
+                    return new ()
                     {
                         IsSuccess = false,
                         StatusCode = 500,
                         Messages = { ""Item Not Found"" },
                     };
                 }
-                var entity = tag.Delete();
+                var entity = record.Delete();
                 _ = await _context.SaveChangesAsync();
 
                 _cacheService.Clear(""$EntityName:"");
 
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
                     IsSuccess = true,
                     StatusCode = 200,
-                    Messages = { ""data removed successfully"" },
-                    Data = _mapper.Map<$EntityNameDto>(entity)
+                    Messages = { ""data removed successfully"" }
                 };
 
             }
@@ -293,10 +293,10 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
-                    IsSuccess = true,
-                    StatusCode = 200,
+                    IsSuccess = false,
+                    StatusCode = 500,
                     Messages = { ""error while removing data"" },
                 };
             }
