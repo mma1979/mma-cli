@@ -182,7 +182,7 @@ namespace Mma.Cli.Shared.Builders
 
             using StreamWriter writer = new(path);
             writer.Write(
-                (Mapper is Mappers.Mapster? MapsterValidator.Template : Validator.Template)
+                Validator.Template
                     .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
             );

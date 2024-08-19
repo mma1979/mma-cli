@@ -77,7 +77,7 @@ namespace $SolutionName.AppApi.Controllers
             {
 
                 _logger.LogError(ex.Message, ex);
-				var result = new ResultViewModel<List<$EntityNameDto>>{
+				var result = new ResultViewModel<List<$EntityNameReadModel>>{
 					IsSuccess = false,
 					StatusCode = 500
 				};
