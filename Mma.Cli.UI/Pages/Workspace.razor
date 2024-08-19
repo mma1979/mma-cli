@@ -22,7 +22,7 @@
 
                     @* <RadzenIcon Icon="keyboard_double_arrow_right" Style="margin-top: -5px"/> *@
 
-                    <RadzenButton Icon="eyboard_double_arrow_right" Style="margin-top: -5px;width: 55px;" Variant="Variant.Flat" />
+                    <RadzenButton Icon="double_arrow" Style="margin-top: -5px;width: 55px;" Variant="Variant.Flat" />
                     <RadzenLabel Text="@Project?.Name"
                                  Style="padding: 0.5rem 1rem;" />
                 </RadzenStack>
@@ -147,8 +147,9 @@
                                 Style="width: 100%; max-width: 400px;"
                                 AllowFiltering="true" />
             </div>
+           
             <div class="form-group">
-                <RadzenLabel Text="Generate API Controller" />
+                <RadzenLabel Text="Generate API Controller?" />
                 <RadzenButton ButtonStyle="@ButtonStyle.Primary"
                               Shade="Shade.Lighter"
                               Click="() => EntityModel.HasApi = !EntityModel.HasApi">
