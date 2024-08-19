@@ -19,7 +19,7 @@
                               Variant="Variant.Text"
                               Click='()=> NavigationManager.NavigateTo("/")' />
 
-               <RadzenButton Icon="eyboard_double_arrow_right" Style="margin-top: -5px;width: 55px;" Variant="Variant.Flat" />
+               <RadzenButton Icon="double_arrow" Style="margin-top: -5px;width: 55px;" Variant="Variant.Flat" />
 
                 <RadzenButton Text="@(IsImport? "Import Solution":"Create Solution")"
                               Style="margin-top: -5px; color: white;" Icon="note_add"
@@ -30,8 +30,8 @@
                 <span>&nbsp;</span>
 
                 <RadzenTextBox Style="margin-top: 5px; width:40%;"
-                               Placeholder="Solution Path"
-                               Value="@WorkingDirectory"/>
+                               Placeholder="Solution Path" 
+                               @bind-Value="@WorkingDirectory"/>
 
                 <RadzenButton Icon="cached"
                               Style="margin-top: 5px"
@@ -43,10 +43,7 @@
 
                 @if (!IsImport)
                 {
-                    <RadzenTextBox Style="margin-top: 5px; width:250px;"
-                                   Placeholder="New Folder"
-                                   Value="@NewFolder"/>
-
+                    
                     <RadzenButton Icon="note_add"
                                   Style="margin-top: 5px"
                                   Click="NewDirectory"/>
@@ -144,6 +141,28 @@
 
     private async Task NewDirectory()
     {
+        var result = await DialogService.OpenAsync("Create Folder", ds =>
+    @<RadzenStack Gap="1.5rem">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+            <div class="form-group">
+                <RadzenLabel>Folder Name</RadzenLabel>
+                <RadzenTextBox @bind-Value="NewFolder" Name="FolderName"
+                               Style="width: 100%; max-width: 400px;" />
+                <RadzenRequiredValidator Component="FolderName" Text="Enter Folder Name" />
+            </div>
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Horizontal">
+            <RadzenButton Text="Ok" Click="() => CreateFolder(ds)" Style="width: 80px;" />
+            <RadzenButton Text="Cancel" Click="() => ds.Close(false)" ButtonStyle="ButtonStyle.Light" />
+        </RadzenStack>
+
+    </RadzenStack>, new DialogOptions() { ShowTitle = true, Style = "max-width: 375px" });
+        
+    }
+
+    private async Task CreateFolder(DialogService ds)
+    {
         if (Output.Contains(NewFolder))
             NewFolder += $"{new Random().Next(1, 100)}";
 
@@ -152,6 +171,9 @@
         WorkingDirectory = path;
 
         await LoadDirectory();
+
+        ds.Close(true);
+
     }
 
     private async Task ImportSolution()
