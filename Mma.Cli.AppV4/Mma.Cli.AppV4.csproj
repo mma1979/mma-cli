@@ -11,9 +11,9 @@
     <FileVersion>8.0.0</FileVersion>
     <RootNamespace>$(MSBuildProjectName.Replace(" ", "_"))</RootNamespace>
     <AssemblyName>mma-cli</AssemblyName>
-    <AssemblyVersion>4.2.1</AssemblyVersion>
-    <Version>4.2.1</Version>
-    <PackageVersion>4.2.1</PackageVersion>
+    <AssemblyVersion>4.3.0</AssemblyVersion>
+    <Version>4.3.0</Version>
+    <PackageVersion>4.3.0</PackageVersion>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
     <PackageIconUrl>https://i.imgur.com/wxeEDiY.png</PackageIconUrl>

@@ -14,7 +14,7 @@ using $SolutionName.Core.Database.Identity;
 
 namespace $SolutionName.Core.Database.Tables
 {
-    public partial class $EntityNameDto
+    public partial class $EntityNameModifyModel
     {
         public $PK Id { get;  set; }
         public Guid? CreatedBy { get;  set; }

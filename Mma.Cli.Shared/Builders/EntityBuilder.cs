@@ -93,7 +93,7 @@ namespace Mma.Cli.Shared.Builders
             var fileName = Mapper switch
             {
                 Mappers.Mapster => $"{ComponentName}Dto.g.cs",
-                _ => $"{ComponentName}Dto.cs"
+                _ => $"{ComponentName}ModifyModel.cs"
             };
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", fileName);
 
@@ -109,7 +109,7 @@ namespace Mma.Cli.Shared.Builders
 
             void BuildReadDto()
             {
-                var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ComponentName}ReadDto.cs");
+                var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ComponentName}ReadModel.cs");
                 using StreamWriter writer = new(path);
                 writer.Write(
                     Templates.AutoMapper.ReadDto.Template
@@ -182,7 +182,7 @@ namespace Mma.Cli.Shared.Builders
 
             using StreamWriter writer = new(path);
             writer.Write(
-                Templates.Validator.Template
+                Validator.Template
                     .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
             );

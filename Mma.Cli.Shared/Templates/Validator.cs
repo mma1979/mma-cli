@@ -14,7 +14,7 @@ using $SolutionName.Core.Database.Tables;
 
 namespace $SolutionName.Core.Validations
 {
-    public class $EntityNameValidator:AbstractValidator<$EntityNameDto>
+    public class $EntityNameValidator:AbstractValidator<$EntityNameModifyModel>
     {
 
         public $EntityNameValidator()

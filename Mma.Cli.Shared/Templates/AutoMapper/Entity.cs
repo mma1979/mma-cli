@@ -45,9 +45,9 @@ namespace $SolutionName.Core.Database.Tables
 
         
 
-        public $EntityName($EntityNameDto dto)
+        public $EntityName($EntityNameModifyModel model)
         {
-            ValidationResult result = Validator.Validate(dto);
+            ValidationResult result = Validator.Validate(model);
             if (!result.IsValid)
             {
                 var messages = result.Errors.Select(e => e.ErrorMessage);
@@ -59,9 +59,9 @@ namespace $SolutionName.Core.Database.Tables
 
         }
 
-        public $EntityName Update($EntityNameDto dto)
+        public $EntityName Update($EntityNameModifyModel model)
         {
-            ValidationResult result = Validator.Validate(dto);
+            ValidationResult result = Validator.Validate(model);
             if (!result.IsValid)
             {
                 var messages = result.Errors.Select(e => e.ErrorMessage);

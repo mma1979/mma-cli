@@ -31,7 +31,7 @@ namespace $SolutionName.Services
 
     public class $EntityNameService
     {
-        private readonly ApplicationDbContext _context;
+		private readonly ApplicationDbContext _context;
         private readonly ILogger<$EntityNameService> _logger;
         private readonly ICacheService _cacheService;
 
@@ -44,11 +44,12 @@ namespace $SolutionName.Services
 
 
 
-        public async Task<ResultViewModel<List<$EntityNameDto>>> All(QueryViewModel query)
+        public async Task<ResultViewModel<List<$EntityNameReadModel>>> All(QueryViewModel query)
         {
+			var cacheKey = $""$EntityName:GetAll_{query.GetHashCode()}"".GetHashCode().ToString();
             try
             {
-                var cached = _cacheService.Get<ResultViewModel<List<$EntityNameDto>>>($""$EntityName:GetAll_{query.GetHashCode()}"");
+                var cached = _cacheService.Get<ResultViewModel<List<$EntityNameReadModel>>>(cacheKey);
 
                 if (cached != null)
                 {
@@ -72,7 +73,7 @@ namespace $SolutionName.Services
                 var count = await data.CountAsync();
                 var list = await page.ToListAsync();
 
-                var result = new ResultViewModel<List<$EntityNameDto>>
+                var result = new ResultViewModel<List<$EntityNameReadModel>>
                 {
                     IsSuccess = true,
                     StatusCode = 200,
@@ -81,10 +82,10 @@ namespace $SolutionName.Services
                     PageSize = query.PageSize,
                     PageNumber = query.PageNumber,
                     Filter = query.Filter,
-                    Data = list.Adapt<List<$EntityNameDto>>()
+                    Data = list.Adapt<List<$EntityNameReadModel>>()
                 };
 
-                _cacheService.Set($""$EntityName:GetAll_{query.GetHashCode()}"", result);
+                _cacheService.Set(cacheKey, result);
 
                 return result;
             }
@@ -92,7 +93,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<List<$EntityNameDto>>
+                return new ResultViewModel<List<$EntityNameReadModel>>
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -104,11 +105,12 @@ namespace $SolutionName.Services
             }
         }
 
-        public async Task<ResultViewModel<$EntityNameDto>> Find(Expression<Func<$EntityName, bool>> predicate)
+        public async Task<ResultViewModel<$EntityNameModifyModel>> Find(Expression<Func<$EntityName, bool>> predicate)
         {
+			var cacheKey = $""$EntityName:Find_{predicate.Body}"".GetHashCode().ToString()
             try
             {
-                var cached = _cacheService.Get<ResultViewModel<$EntityNameDto>>($""$EntityName:Find_{predicate.Body}"");
+                var cached = _cacheService.Get<ResultViewModel<$EntityNameModifyModel>>(cacheKey);
 
                 if (cached != null)
                 {
@@ -116,15 +118,15 @@ namespace $SolutionName.Services
                 }
 
                 var data = await _context.$EntitySetName.SingleOrDefaultAsync(predicate);
-                var result = new ResultViewModel<$EntityNameDto>
+                var result = new ResultViewModel<$EntityNameModifyModel>
                 {
                     IsSuccess = true,
                     StatusCode = 200,
                     Messages = { ""data loaded successfuly"" },
-                    Data = data.Adapt<$EntityNameDto>()
+                    Data = data.Adapt<$EntityNameModifyModel>()
                 };
 
-                _cacheService.Set($""$EntityName:Find_{predicate.Body}"", result);
+                _cacheService.Set(cacheKey, result);
 
                 return result;
             }
@@ -132,7 +134,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameDto>
+                return new ResultViewModel<$EntityNameModifyModel>
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -140,12 +142,13 @@ namespace $SolutionName.Services
                 };
             }
         }
-        public async Task<ResultViewModel<$EntityNameDto>> Find($PK id)
+        public async Task<ResultViewModel<$EntityNameModifyModel>> Find($PK id)
         {
+			var cacheKey = $""$EntityName:Find_{id}"".GetHashCode().ToString();
             try
             {
 
-                var cached = _cacheService.Get<ResultViewModel<$EntityNameDto>>($""$EntityName:Find_{id}"");
+                var cached = _cacheService.Get<ResultViewModel<$EntityNameModifyModel>>(cacheKey);
 
                 if (cached != null)
                 {
@@ -153,15 +156,15 @@ namespace $SolutionName.Services
                 }
 
                 var data = await _context.$EntitySetName.FindAsync(id);
-                var result = new ResultViewModel<$EntityNameDto>
+                var result = new ResultViewModel<$EntityNameModifyModel>
                 {
                     IsSuccess = true,
                     StatusCode = 200,
                     Messages = { ""data loaded successfuly"" },
-                    Data = data.Adapt<$EntityNameDto>()
+                    Data = data.Adapt<$EntityNameModifyModel>()
                 };
 
-                _cacheService.Set($""$EntityName:Find_{id}"", result);
+                _cacheService.Set(cacheKey, result);
 
                 return result;
             }
@@ -169,7 +172,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameDto>
+                return new ResultViewModel<$EntityNameModifyModel>
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -179,7 +182,7 @@ namespace $SolutionName.Services
         }
 
 
-        public async Task<ResultViewModel<$EntityNameDto>> Add($EntityNameDto dto)
+        public async Task<AcknowledgeViewModel> Add($EntityNameModifyModel dto)
         {
             try
             {
@@ -188,10 +191,9 @@ namespace $SolutionName.Services
                 _ = await _context.SaveChangesAsync();
 
                 _cacheService.Clear(""$EntityName:"");
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
 
-                    Data = entity.Entity.Adapt<$EntityNameDto>(),
                     IsSuccess = true,
                     StatusCode = 200,
                     Messages = { ""data saved successfuly"" },
@@ -202,7 +204,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -211,7 +213,7 @@ namespace $SolutionName.Services
             }
         }
 
-        public async Task<ResultViewModel<$EntityNameDto>> Update($EntityNameDto dto)
+        public async Task<AcknowledgeViewModel> Update($EntityNameModifyModel dto)
         {
             try
             {
@@ -220,7 +222,7 @@ namespace $SolutionName.Services
                 {
                     var exp = new KeyNotFoundException($""item number {dto.Id} does not Exist"");
                     _logger.LogError(exp.Message, exp);
-                    return new ResultViewModel<$EntityNameDto>
+                    return new ResultViewModel<$EntityNameModifyModel>
                     {
                         IsSuccess = false,
                         StatusCode = 500,
@@ -235,12 +237,11 @@ namespace $SolutionName.Services
 
                 _cacheService.Clear(""$EntityName:"");
 
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
                     IsSuccess = true,
                     StatusCode = 200,
-                    Messages = { ""data modified successfuly"" },
-                    Data = entity.Adapt<$EntityNameDto>()
+                    Messages = { ""data modified successfuly"" }
                 };
 
             }
@@ -248,16 +249,16 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
-                    IsSuccess = true,
-                    StatusCode = 200,
+                    IsSuccess = false,
+                    StatusCode = 500,
                     Messages = { ""error while saving data"" },
                 };
             }
         }
 
-        public async Task<ResultViewModel<$EntityNameDto>> Delete($PK id)
+        public async Task<AcknowledgeViewModel> Delete($PK id)
         {
             try
             {
@@ -266,7 +267,7 @@ namespace $SolutionName.Services
                 {
                     var exp = new KeyNotFoundException($""item number {id} does not Exist"");
                     _logger.LogError(exp.Message, exp);
-                    return new ResultViewModel<$EntityNameDto>
+                    return new ResultViewModel<$EntityNameModifyModel>
                     {
                         IsSuccess = false,
                         StatusCode = 500,
@@ -278,12 +279,12 @@ namespace $SolutionName.Services
 
                 _cacheService.Clear(""$EntityName:"");
 
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
                     IsSuccess = true,
                     StatusCode = 200,
                     Messages = { ""data removed successfuly"" },
-                    Data = entity.Adapt<$EntityNameDto>()
+                    Data = entity.Adapt<$EntityNameModifyModel>()
                 };
 
             }
@@ -291,10 +292,10 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameDto>
+                return new ()
                 {
-                    IsSuccess = true,
-                    StatusCode = 200,
+                    IsSuccess = false,
+                    StatusCode = 500,
                     Messages = { ""error while removing data"" },
                 };
             }
