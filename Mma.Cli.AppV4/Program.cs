@@ -89,7 +89,7 @@ namespace Mma.Cli.AppV4
 
                 case CommandsFlags.Version:
                 case CommandsFlags.VersionShortHand:
-                    Output.Success($"mma {version}");
+                    Output.Success($"mma {version.Split('+')[0]}");
                     Environment.Exit(0);
                     break;
 
