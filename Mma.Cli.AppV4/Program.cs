@@ -89,7 +89,20 @@ namespace Mma.Cli.AppV4
 
                 case CommandsFlags.Version:
                 case CommandsFlags.VersionShortHand:
-                    Output.Success($"mma {version.Split('+')[0]}");
+                    Output.Success($"""
+
+.___  ___. .___  ___.      ___      
+|   \/   | |   \/   |     /   \     
+|  \  /  | |  \  /  |    /  ^  \    
+|  |\/|  | |  |\/|  |   /  /_\  \   
+|  |  |  | |  |  |  |  /  _____  \  
+|__|  |__| |__|  |__| /__/     \__\ 
+
+
+   mma {version.Split('+')[0]}
+
+
+""");
                     Environment.Exit(0);
                     break;
 

@@ -77,7 +77,7 @@ namespace Mma.Cli.Shared.Helpers
 
 
 NAME:
-   mma {version}
+   mma {version.Split('+')[0]}
 
 USAGE:
    mma [global options] command [command options] [arguments...]
