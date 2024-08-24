@@ -42,15 +42,11 @@ namespace $SolutionName.EntityFramework.EntityConfigurations
 			 .HasValueGenerator<CreatedDateTimeValueGenerator>();
 
 			builder.Property(e => e.ModifiedDate)
-				.HasColumnType(""datetime"")
-				.ValueGeneratedOnUpdate()
-				.HasValueGenerator<ModifyDateTimeValueGenerator>();
+				.HasColumnType(""datetime"");
 
 			builder.HasIndex(e => e.IsDeleted);
 			builder.Property(e => e.DeletedDate)
-				.HasColumnType(""datetime"")
-				.ValueGeneratedOnUpdate()
-				.HasValueGenerator<DeletedDateTimeValueGenerator>();
+				.HasColumnType(""datetime"");
 
 
 		}
