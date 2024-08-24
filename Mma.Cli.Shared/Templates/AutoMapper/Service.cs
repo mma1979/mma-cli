@@ -277,6 +277,7 @@ namespace $SolutionName.Services
                     };
                 }
                 var entity = record.Delete();
+                _context.Entry(entity).State = EntityState.Deleted;
                 _ = await _context.SaveChangesAsync();
 
                 _cacheService.Clear(""$EntityName:"");

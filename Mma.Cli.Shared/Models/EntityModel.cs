@@ -13,6 +13,7 @@ namespace Mma.Cli.Shared.Models
 
         public string PkType { get; set; } = "Guid";
 
+        public bool HasService { get; set; } = true;
         public bool HasApi { get; set; } = true;
         public int? ProjectId { get; set; }
 
