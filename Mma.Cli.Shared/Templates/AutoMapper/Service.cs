@@ -29,7 +29,7 @@ namespace $SolutionName.Services
 {
 
 
-    public class $EntityNameService
+    public class $EntityNameService : IDisposable
     {
         private readonly ApplicationDbContext _context;
         private readonly ILogger<$EntityNameService> _logger;
@@ -46,7 +46,7 @@ namespace $SolutionName.Services
 
 
 
-        public async Task<ResultViewModel<List<$EntityNameReadModel>> All(QueryViewModel query)
+        public async Task<ResultViewModel<List<$EntityNameReadModel>>> All(QueryViewModel query)
         {
 			var cacheKey = $""$EntityName:GetAll_{query.GetHashCode()}"".GetHashCode().ToString();
             try
@@ -75,7 +75,7 @@ namespace $SolutionName.Services
                 var count = await data.CountAsync();
                 var list = await page.ToListAsync();
 
-                var result = new ()
+                var result = new ResultViewModel<List<$EntityNameReadModel>>
                 {
                     IsSuccess = true,
                     StatusCode = 200,
@@ -109,10 +109,10 @@ namespace $SolutionName.Services
 
         public async Task<ResultViewModel<$EntityNameModifyModel>> Find(Expression<Func<$EntityName, bool>> predicate)
         {
-			vr cacheKey = $""$EntityName:Find_{predicate.Body}"".GetHashCode().ToString();
+			var cacheKey = $""$EntityName:Find_{predicate.Body}"".GetHashCode().ToString();
             try
             {
-                var cached = _cacheService.Get<ResultViewModel<$EntityNameDto>>(cacheKey);
+                var cached = _cacheService.Get<ResultViewModel<$EntityNameModifyModel>>(cacheKey);
 
                 if (cached != null)
                 {
@@ -120,7 +120,7 @@ namespace $SolutionName.Services
                 }
 
                 var data = await _context.$EntitySetName.SingleOrDefaultAsync(predicate);
-                var result = new ()
+                var result = new ResultViewModel<$EntityNameModifyModel>
                 {
                     IsSuccess = true,
                     StatusCode = 200,
@@ -150,7 +150,7 @@ namespace $SolutionName.Services
             try
             {
 
-                var cached = _cacheService.Get<ResultViewModel<$EntityNameDto>>(cacheKey);
+                var cached = _cacheService.Get<ResultViewModel<$EntityNameModifyModel>>(cacheKey);
 
                 if (cached != null)
                 {
@@ -158,12 +158,12 @@ namespace $SolutionName.Services
                 }
 
                 var data = await _context.$EntitySetName.FindAsync(id);
-                var result = new new()
+                var result = new ResultViewModel<$EntityNameModifyModel>
                 {
                     IsSuccess = true,
                     StatusCode = 200,
                     Messages = { ""data loaded successfully"" },
-                    Data = _mapper.Map<$EntityNameDto>(data)
+                    Data = _mapper.Map<$EntityNameModifyModel>(data)
                 };
 
                 _cacheService.Set(cacheKey, result);
@@ -174,7 +174,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new new ()
+                return new ()
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -219,10 +219,10 @@ namespace $SolutionName.Services
         {
             try
             {
-                var record = await _context.$EntitySetName.FindAsync(dto.Id);
+                var record = await _context.$EntitySetName.FindAsync(model.Id);
                 if (record == null)
                 {
-                    var exp = new KeyNotFoundException($""item number {dto.Id} does not Exist"");
+                    var exp = new KeyNotFoundException($""item number {model.Id} does not Exist"");
                     _logger.LogError(exp.Message, exp);
                     return new ()
                     {
@@ -233,7 +233,7 @@ namespace $SolutionName.Services
                 }
 
 
-                var entity = record.Update(dto);
+                var entity = record.Update(model);
 
                 _ = await _context.SaveChangesAsync();
 
@@ -303,6 +303,27 @@ namespace $SolutionName.Services
             }
         }
 
+#region IDisposable Support
+        public void Dispose(bool dispose)
+        {
+            if (dispose)
+            {
+                Dispose();
+
+            }
+        }
+
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
+            GC.Collect();
+        }
+
+
+
+
+
+        #endregion
 
     }
 }";

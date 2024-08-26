@@ -27,6 +27,8 @@ using $SolutionName.AppApi.Infrastrcture;
 
 using $SolutionName.Core.Database.Notifications;
 
+using System.Security.Claims;
+
 namespace $SolutionName.AppApi.Controllers
 {
     [Route(""api/[controller]"")]
@@ -61,7 +63,7 @@ namespace $SolutionName.AppApi.Controllers
             
             try
             {
-                query.UserId = UserId;
+                query.UserId = User.FindFirstValue(""Id"").ToGuid();
                 var data = await _$EntityVarNameService.All(query);
                 data.Messages = data.Messages.Select(m => _translator.Translate(m, Language)).ToList();
                 if (data.IsSuccess)
@@ -193,8 +195,10 @@ namespace $SolutionName.AppApi.Controllers
             {
                 if (model.Id != id)
                 {
-                    result.IsSuccess = false;
-                    result.Messages.Add(_translator.Translate(""InvalidData"", Language));
+                   var result = new AcknowledgeViewModel{
+                      IsSuccess = false
+                    };
+                    result.Messages.Add(_translator.Translate(""InvalidData"", Language))
                     return BadRequest(result);
                 }
                 var data = await _$EntityVarNameService.Update(model);

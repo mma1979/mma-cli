@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using $SolutionName.Core.Database.Identity;
 using $SolutionName.Core.Database.Tables;
 
-using $SolutionName.EntityFramework.Infrastrcture;
+using $SolutionName.EntityFramework.Infrastrcture.ValueGenerator;
 
 namespace $SolutionName.EntityFramework.EntityConfigurations
 {
