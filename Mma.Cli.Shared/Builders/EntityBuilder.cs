@@ -16,13 +16,13 @@ namespace Mma.Cli.Shared.Builders
 {
     public class EntityBuilder
     {
-        public string SolutionPath { get; private set; }
-        public string SolutionName { get; private set; }
-        public string ProjectsPath { get; private set; }
-        public string ComponentType { get; private set; }
-        public string ComponentName { get; private set; }
-        public string PkType { get; private set; }
-        public string Mapper { get; private set; }
+        public string SolutionPath { get; private set; } = "";
+        public string SolutionName { get; private set; } = "";
+        public string ProjectsPath { get; private set; } = "";
+        public string ComponentType { get; private set; } = "";
+        public string ComponentName { get; private set; } = "";
+        public string PkType { get; private set; } = "";
+        public string Mapper { get; private set; } = "";
 
         public EntityBuilder()
         {
@@ -88,18 +88,18 @@ namespace Mma.Cli.Shared.Builders
         }
 
 
-        public EntityBuilder GenerateDto()
+        public EntityBuilder GenerateModels()
         {
             var fileName = Mapper switch
             {
-                Mappers.Mapster => $"{ComponentName}Dto.g.cs",
+                Mappers.Mapster => $"{ComponentName}ModifyModel.g.cs",
                 _ => $"{ComponentName}ModifyModel.cs"
             };
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", fileName);
 
             using StreamWriter writer = new(path);
             writer.Write(
-               (Mapper is Mappers.Mapster? MappsterDtoTemplate.Template : DtoTemplate.Template)
+               (Mapper is Mappers.Mapster ? Templates.Mappster.ModifyModel.Template : Templates.AutoMapper.ModifyModel.Template)
                     .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
                     .Replace("$PK", PkType)
@@ -107,12 +107,17 @@ namespace Mma.Cli.Shared.Builders
             writer.Flush();
             writer.Close();
 
-            void BuildReadDto()
+            void BuildReadModel()
             {
-                var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ComponentName}ReadModel.cs");
+                var fileName = Mapper switch
+                {
+                    Mappers.Mapster => $"{ComponentName}ReadModel.g.cs",
+                    _ => $"{ComponentName}ReadModel.cs"
+                };
+                var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models",fileName);
                 using StreamWriter writer = new(path);
                 writer.Write(
-                    Templates.AutoMapper.ReadDto.Template
+                     (Mapper is Mappers.Mapster ? Templates.Mappster.ReadModel.Template : Templates.AutoMapper.ReadModel.Template)
                         .Replace("$SolutionName", SolutionName)
                         .Replace("$EntityName", ComponentName)
                         .Replace("$PK", PkType)
@@ -120,9 +125,10 @@ namespace Mma.Cli.Shared.Builders
                 writer.Flush();
                 writer.Close();
             }
+            BuildReadModel();
             if (Mapper == Mappers.AutoMapper)
             {
-                BuildReadDto();
+                
                 BuildAutoMapperProfile();
             }
 

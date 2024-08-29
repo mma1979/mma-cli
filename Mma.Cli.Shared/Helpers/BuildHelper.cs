@@ -36,7 +36,7 @@ namespace Mma.Cli.Shared.Helpers
         public static string GetExecutablePath()
         {
             string executablePath = Assembly.GetExecutingAssembly().Location;
-            return Path.GetDirectoryName(executablePath);
+            return Path.GetDirectoryName(executablePath)!;
         }
 
         public static string GetSetName(string componentName) =>
@@ -77,7 +77,7 @@ namespace Mma.Cli.Shared.Helpers
 
 
 NAME:
-   mma {version}
+   mma {version.Split('+')[0]}
 
 USAGE:
    mma [global options] command [command options] [arguments...]

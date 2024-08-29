@@ -9,7 +9,7 @@ namespace Mma.Cli.Shared.Models
     public class RelationModel
     {
         public int Id { get; set; }
-        public string Name { get; set; }
+        public string Name { get; set; } = "";
         public bool Applied { get; set; } = false;
 
         public int? ParentId { get; set; }

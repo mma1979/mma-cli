@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Mma.Cli.Shared.Templates
+namespace Mma.Cli.Shared.Templates.AutoMapper
 {
-    public static class MappsterDtoTemplate
+    public static class ModifyModel
     {
         public static string Template = @"using System;
 using System.Collections.Generic;
@@ -14,15 +14,15 @@ using $SolutionName.Core.Database.Identity;
 
 namespace $SolutionName.Core.Database.Tables
 {
-    public partial class $EntityNameDto
+    public partial class $EntityNameModifyModel
     {
         public $PK Id { get;  set; }
-        public long? CreatedBy { get;  set; }
+        public Guid? CreatedBy { get;  set; }
         public DateTime? CreatedDate { get;  set; }
-        public long? ModifiedBy { get;  set; }
+        public Guid? ModifiedBy { get;  set; }
         public DateTime? ModifiedDate { get;  set; }
         public bool? IsDeleted { get;  set; }
-        public long? DeletedBy { get;  set; }
+        public Guid? DeletedBy { get;  set; }
         public DateTime? DeletedDate { get;  set; }
     }
 }";

@@ -19,7 +19,7 @@ namespace Mma.Cli.Shared.Data
         {
             var project = ctx.Projects
                 .AsNoTracking()
-                .FirstOrDefault(p => p.Id == projectId);
+                .First(p => p.Id == projectId);
 
             project.Entities = new();
 
