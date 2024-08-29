@@ -89,7 +89,7 @@ namespace Mma.Cli.UI.Data
         {
             string[] args = { "g", "e", model.EntityName, model.PkType, "--mapper", BuildHelper.DetectMapper(solutionPath) };
             EntityBuilder.New(args, solutionPath)
-                    .GenerateDto()
+                    .GenerateModels()
                     .GenerateValidator()
                     .GenerateEntity()
                     .GenerateEntityConfig()
@@ -104,7 +104,7 @@ namespace Mma.Cli.UI.Data
         {
             string[] args = { "g", "p", entityName, model.ColumnName, model.DataType, $"{model.Nullable}" };
             PropertiesBuilder.New(args, BuildHelper.DetectMapper(solutionPath), solutionPath)
-                   .UpdateDto()
+                   .UpdateEntityModels()
                    .UpdateEntity()
                    .UpdateEntityConfig();
 

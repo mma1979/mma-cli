@@ -122,7 +122,7 @@ namespace Mma.Cli.AppV4
                 case ComponentFlags.Entity:
                 case ComponentFlags.EntityShortHand:
                     EntityBuilder.New(args)
-                    .GenerateDto()
+                    .GenerateModels()
                     .GenerateValidator()
                     .GenerateEntity()
                     .GenerateEntityConfig()
@@ -138,7 +138,7 @@ namespace Mma.Cli.AppV4
                     try
                     {
                         PropertiesBuilder.New(args, BuildHelper.DetectMapper())
-                    .UpdateDto()
+                    .UpdateEntityModels()
                     .UpdateEntity()
                     .UpdateEntityConfig();
                         Output.Success("Property has been generated");
@@ -223,7 +223,7 @@ namespace Mma.Cli.AppV4
 
                 var mapper = BuildHelper.DetectMapper();
                 EntityBuilder.New(new[] { "g", "e", entityName, pkType, Flags.MapperFlag, mapper, api, r })
-                           .GenerateDto()
+                           .GenerateModels()
                            .GenerateValidator()
                            .GenerateEntity()
                            .GenerateEntityConfig()
@@ -246,7 +246,7 @@ namespace Mma.Cli.AppV4
                 var r = performRemove ? "--remove" : "";
 
                 PropertiesBuilder.New(new[] { "g", "p", entityName, propertyName, pType, n, r }, BuildHelper.DetectMapper())
-                    .UpdateDto()
+                    .UpdateEntityModels()
                     .UpdateEntity()
                     .UpdateEntityConfig();
                 Output.Success("Property has been generated");

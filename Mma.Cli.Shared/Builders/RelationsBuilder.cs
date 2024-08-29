@@ -11,21 +11,18 @@ namespace Mma.Cli.Shared.Builders
 {
     public class RelationsBuilder
     {
-        public string SolutionPath { get; private set; }
-        public string SolutionName { get; private set; }
-        public string ProjectsPath { get; private set; }
-        public string Mapper { get; private set; }
+        public string SolutionPath { get; private set; } = "";
+        public string SolutionName { get; private set; } = "";
+        public string ProjectsPath { get; private set; } = "";
+        public string Mapper { get; private set; } = "";
 
-        public string ParentEntity { get; set; }
-        public string ChiledEntity { get; set; }
-        public string ForeignKey { get; set; }
-        public string ForeignDataType { get; set; }
+        public string ParentEntity { get; set; } = "";
+        public string ChiledEntity { get; set; } = "";
+        public string ForeignKey { get; set; } = "";
+        public string ForeignDataType { get; set; } = "";
         public bool RemoveFlag { get; set; }
 
-        public RelationsBuilder()
-        {
-            SolutionPath = Directory.GetCurrentDirectory();
-        }
+        public RelationsBuilder() => SolutionPath = Directory.GetCurrentDirectory();
 
         public RelationsBuilder(string solutionPath)
         {
@@ -153,7 +150,7 @@ namespace Mma.Cli.Shared.Builders
             void UpdateReadDto()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ReadDto.cs");
+                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ReadModel.cs");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -187,7 +184,7 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFromReadDto()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}ReadDto.cs");
+                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}ReadModel.cs");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(foreignKey));

@@ -58,15 +58,15 @@ ORDER BY
             return dt.Rows.Cast<DataRow>()
                 .Select(r => new DatabaseScheme
                 {
-                    schema_name = r["schema_name"].ToString(),
-                    table_name = r["table_name"].ToString(),
-                    column_id = r["column_id"].ToString(),
-                    column_name = r["column_name"].ToString(),
-                    data_type = r["data_type"].ToString(),
-                    max_length = r["max_length"].ToString(),
-                    precision = r["precision"].ToString(),
-                    is_nullable = bool.Parse(r["is_nullable"].ToString()),
-                    is_foreign_key = bool.Parse(r["is_foreign_key"].ToString())
+                    schema_name = r["schema_name"].ToString()!,
+                    table_name = r["table_name"].ToString()!,
+                    column_id = r["column_id"].ToString()!,
+                    column_name = r["column_name"].ToString()!,
+                    data_type = r["data_type"].ToString()!,
+                    max_length = r["max_length"].ToString()!,
+                    precision = r["precision"].ToString()!,
+                    is_nullable = bool.Parse(r["is_nullable"].ToString()!),
+                    is_foreign_key = bool.Parse(r["is_foreign_key"].ToString()!)
                      
                 }).ToList();
 

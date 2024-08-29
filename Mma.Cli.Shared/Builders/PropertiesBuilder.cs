@@ -84,64 +84,64 @@ namespace Mma.Cli.Shared.Builders
             return builder;
         }
 
-        public PropertiesBuilder UpdateDto()
+        public PropertiesBuilder UpdateEntityModels()
         {
             var property = BuildProperty(false);
 
-            void UpdateModifiyDto()
+            void UpdateModifyModel()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}Dto.cs");
+                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ModifyModel.cs");
 
-                var lines = File.ReadAllLines(dtoFilePath).ToList();
+                var lines = File.ReadAllLines(modelFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
 
                 lines.Insert(index, property);
 
-                using StreamWriter writer = new(dtoFilePath);
+                using StreamWriter writer = new(modelFilePath);
                 writer.Write(string.Join('\n', lines));
 
                 writer.Flush();
                 writer.Close();
             }
 
-            void UpdateReadDto()
+            void UpdateReadModel()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ReadDto.cs");
+                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ReadModel.cs");
 
-                var lines = File.ReadAllLines(readDtoFilePath).ToList();
+                var lines = File.ReadAllLines(modelFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
 
                 lines.Insert(index, property);
 
-                using StreamWriter writer = new(readDtoFilePath);
+                using StreamWriter writer = new(modelFilePath);
                 writer.Write(string.Join('\n', lines));
 
                 writer.Flush();
                 writer.Close();
             }
 
-            void RemoveFromModifiyDto()
+            void RemoveFromModifiyModel()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}Dto.cs");
+                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ModifyModel.cs");
 
-                var lines = File.ReadAllLines(dtoFilePath).ToList();
+                var lines = File.ReadAllLines(modelFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(property));
                 var index = lines.IndexOf(line);
 
                 lines.RemoveAt(index);
 
-                using StreamWriter writer = new(dtoFilePath);
+                using StreamWriter writer = new(modelFilePath);
                 writer.Write(string.Join('\n', lines));
 
                 writer.Flush();
                 writer.Close();
             }
 
-            void RemoveFromReadDto()
+            void RemoveFromReadModel()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ReadDto.cs");
+                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ReadModel.cs");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(property));
@@ -158,13 +158,13 @@ namespace Mma.Cli.Shared.Builders
 
             if (RemoveFlag)
             {
-                RemoveFromModifiyDto();
-                RemoveFromReadDto();
+                RemoveFromModifiyModel();
+                RemoveFromReadModel();
             }
             else
             {
-                UpdateModifiyDto();
-                UpdateReadDto();
+                UpdateModifyModel();
+                UpdateReadModel();
             }
 
 

@@ -16,10 +16,10 @@ namespace Mma.Cli.Shared.Builders
 {
     public class SolutionBuilder
     {
-        public string SolutionName { get; private set; }
-        public string SolutionPath { get; private set; }
-        public string ProjectsPath { get; private set; }
-        public string Mapper { get; private set; }
+        public string SolutionName { get; private set; } = "";
+        public string SolutionPath { get; private set; } = "";
+        public string ProjectsPath { get; private set; } = "";
+        public string Mapper { get; private set; } = "";
 
         public SolutionBuilder(string solutionName)
         {

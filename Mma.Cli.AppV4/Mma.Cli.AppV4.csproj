@@ -1,25 +1,23 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFrameworks>net8.0</TargetFrameworks>
     <LangVersion>Preview</LangVersion>
-
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mma</ToolCommandName>
     <PackageOutputPath>./nupkg</PackageOutputPath>
     <FileVersion>8.0.0</FileVersion>
     <RootNamespace>$(MSBuildProjectName.Replace(" ", "_"))</RootNamespace>
     <AssemblyName>mma-cli</AssemblyName>
-    <AssemblyVersion>4.5.2</AssemblyVersion>
-    <Version>4.5.2</Version>
-    <PackageVersion>4.5.2</PackageVersion>
+    <AssemblyVersion>4.5.3</AssemblyVersion>
+    <Version>4.5.3</Version>
+    <PackageVersion>4.5.3</PackageVersion>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
-    <PackageIconUrl>https://i.imgur.com/wxeEDiY.png</PackageIconUrl>
+    <PackageIcon>mma3.png</PackageIcon>
+    <PackageProjectUrl>https://github.com/mma1979/mma-cli</PackageProjectUrl>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
-
-  
   <ItemGroup>
     <PackageReference Include="CliWrap" Version="3.6.6" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
@@ -27,24 +25,19 @@
     <PackageReference Include="Sharprompt" Version="2.4.5" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
   </ItemGroup>
-
   <ItemGroup>
     <Folder Include="nupkg\" />
     <Folder Include="UI\" />
   </ItemGroup>
-
   <ItemGroup>
     <None Update="UI\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-
   <ItemGroup>
     <None Include="docs\**\*" Pack="true" PackagePath="\" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\Mma.Cli.Shared\Mma.Cli.Shared.csproj" />
   </ItemGroup>
-
 </Project>
