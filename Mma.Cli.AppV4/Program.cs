@@ -329,7 +329,9 @@ namespace Mma.Cli.AppV4
 
         private static bool ExecuteInvalidCommand()
         {
-            throw new NotImplementedException();
+            Output.Error("Invalid Command");
+            BuildHelper.Help(version);
+            return false;
         }
               
 
