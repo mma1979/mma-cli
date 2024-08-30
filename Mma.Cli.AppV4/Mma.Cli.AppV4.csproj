@@ -9,9 +9,9 @@
     <FileVersion>8.0.0</FileVersion>
     <RootNamespace>$(MSBuildProjectName.Replace(" ", "_"))</RootNamespace>
     <AssemblyName>mma-cli</AssemblyName>
-    <AssemblyVersion>4.5.3</AssemblyVersion>
-    <Version>4.5.3</Version>
-    <PackageVersion>4.5.3</PackageVersion>
+    <AssemblyVersion>4.5.4</AssemblyVersion>
+    <Version>4.5.4</Version>
+    <PackageVersion>4.5.4</PackageVersion>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
     <PackageIcon>mma3.png</PackageIcon>
@@ -21,7 +21,7 @@
   <ItemGroup>
     <PackageReference Include="CliWrap" Version="3.6.6" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="RestSharp" Version="111.4.1" />
+    <PackageReference Include="RestSharp" Version="112.0.0" />
     <PackageReference Include="Sharprompt" Version="2.4.5" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
   </ItemGroup>
