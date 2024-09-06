@@ -10,10 +10,11 @@ namespace Mma.Cli.Shared.Templates.Mappster
     {
         public static string Template = @"using $SolutionName.AppApi.Controllers.v1;
 using $SolutionName.Common;
-using $SolutionName.Common.Helpers;
+using $SolutionName.AppApi.Services;
 using $SolutionName.Core.Database.Tables;
 using $SolutionName.Core.Models;
 using $SolutionName.Services;
+using $SolutionName.Core.Consts;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -57,7 +58,7 @@ namespace $SolutionName.AppApi.Controllers
                 return BadRequest(new
                 {
                     IsSuccess = false,
-                    Messages = new[] { ""Request has been canceled"" }
+                    Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
                 });
             }
             
@@ -98,7 +99,7 @@ namespace $SolutionName.AppApi.Controllers
                 return BadRequest(new
                 {
                     IsSuccess = false,
-                    Messages = new[] { ""Request has been canceled"" }
+                    Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
                 });
             }
             
@@ -143,7 +144,7 @@ namespace $SolutionName.AppApi.Controllers
                 return BadRequest(new
                 {
                     IsSuccess = false,
-                    Messages = new[] { ""Request has been canceled"" }
+                    Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
                 });
             }
            
@@ -186,7 +187,7 @@ namespace $SolutionName.AppApi.Controllers
                 return BadRequest(new
                 {
                     IsSuccess = false,
-                    Messages = new[] { ""Request has been canceled"" }
+                    Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
                 });
             }
 			
@@ -238,7 +239,7 @@ namespace $SolutionName.AppApi.Controllers
                 return BadRequest(new
                 {
                     IsSuccess = false,
-                    Messages = new[] { ""Request has been canceled"" }
+                    Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
                 });
             }
 			
