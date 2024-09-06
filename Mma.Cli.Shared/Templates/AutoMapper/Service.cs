@@ -14,6 +14,7 @@ using $SolutionName.Core.Database.Tables;
 using $SolutionName.Core.Models;
 using $SolutionName.EntityFramework;
 using $SolutionName.Services.Chache;
+using $SolutionName.Core.Consts;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -79,7 +80,7 @@ namespace $SolutionName.Services
                 {
                     IsSuccess = true,
                     StatusCode = 200,
-                    Messages = { ""data loaded successfully"" },
+                    Messages = { ResourcesKeys.DATA_LOAD_SUCCESS },
                     Total = count,
                     PageSize = query.PageSize,
                     PageNumber = query.PageNumber,
@@ -99,7 +100,7 @@ namespace $SolutionName.Services
                 {
                     IsSuccess = false,
                     StatusCode = 500,
-                    Messages = { ""error while reading data."" },
+                    Messages = { ResourcesKeys.DATA_READ_ERROR },
                     Filter = query.Filter,
                     PageNumber = query.PageNumber,
                     PageSize = query.PageSize,
@@ -124,7 +125,7 @@ namespace $SolutionName.Services
                 {
                     IsSuccess = true,
                     StatusCode = 200,
-                    Messages = { ""data loaded successfully"" },
+                    Messages = { ResourcesKeys.DATA_LOAD_SUCCESS },
                     Data = _mapper.Map<$EntityNameModifyModel>(data)
                 };
 
@@ -140,7 +141,7 @@ namespace $SolutionName.Services
                 {
                     IsSuccess = false,
                     StatusCode = 500,
-                    Messages = { ""error while loading data"" },
+                    Messages = { ResourcesKeys.DATA_LOAD_ERROR },
                 };
             }
         }
@@ -162,7 +163,7 @@ namespace $SolutionName.Services
                 {
                     IsSuccess = true,
                     StatusCode = 200,
-                    Messages = { ""data loaded successfully"" },
+                    Messages = {  ResourcesKeys.DATA_LOAD_SUCCESS },
                     Data = _mapper.Map<$EntityNameModifyModel>(data)
                 };
 
@@ -178,7 +179,7 @@ namespace $SolutionName.Services
                 {
                     IsSuccess = false,
                     StatusCode = 500,
-                    Messages = { ""error while loading data"" },
+                    Messages = { ResourcesKeys.DATA_LOAD_ERROR },
                 };
             }
         }
@@ -198,7 +199,7 @@ namespace $SolutionName.Services
 
                     IsSuccess = true,
                     StatusCode = 200,
-                    Messages = { ""data saved successfully"" },
+                    Messages = { ResourcesKeys.DATA_SAVE_SUCCESS },
                 };
 
             }
@@ -210,7 +211,7 @@ namespace $SolutionName.Services
                 {
                     IsSuccess = false,
                     StatusCode = 500,
-                    Messages = { ""error while saving data"" },
+                    Messages = { ResourcesKeys.DATA_SAVE_ERROR },
                 };
             }
         }
@@ -228,7 +229,7 @@ namespace $SolutionName.Services
                     {
                         IsSuccess = false,
                         StatusCode = 500,
-                        Messages = { ""Item Not Found"" },
+                        Messages = { ResourcesKeys.ITEM_NOT_FOUND },
                     };
                 }
 
@@ -243,7 +244,7 @@ namespace $SolutionName.Services
                 {
                     IsSuccess = true,
                     StatusCode = 200,
-                    Messages = { ""data modified successfully"" }
+                    Messages = { ResourcesKeys.DATA_MODIFY_SUCCESS }
                 };
 
             }
@@ -255,7 +256,7 @@ namespace $SolutionName.Services
                 {
                     IsSuccess = false,
                     StatusCode = 500,
-                    Messages = { ""error while saving data"" },
+                    Messages = { ResourcesKeys.DATA_SAVE_ERROR },
                 };
             }
         }
@@ -273,7 +274,7 @@ namespace $SolutionName.Services
                     {
                         IsSuccess = false,
                         StatusCode = 500,
-                        Messages = { ""Item Not Found"" },
+                        Messages = { ResourcesKeys.ITEM_NOT_FOUND },
                     };
                 }
                 var entity = record.Delete();
@@ -286,7 +287,7 @@ namespace $SolutionName.Services
                 {
                     IsSuccess = true,
                     StatusCode = 200,
-                    Messages = { ""data removed successfully"" }
+                    Messages = { ResourcesKeys.DATA_REMOVE_SUCCESS }
                 };
 
             }
@@ -298,7 +299,7 @@ namespace $SolutionName.Services
                 {
                     IsSuccess = false,
                     StatusCode = 500,
-                    Messages = { ""error while removing data"" },
+                    Messages = { ResourcesKeys.DATA_REMOVE_ERROR },
                 };
             }
         }
