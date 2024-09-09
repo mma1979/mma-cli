@@ -15,6 +15,7 @@ using $SolutionName.Core.Database.Tables;
 using $SolutionName.Core.Models;
 using $SolutionName.Services;
 using $SolutionName.Core.Consts;
+using $SolutionName.Common.Extensions;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
