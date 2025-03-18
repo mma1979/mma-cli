@@ -200,7 +200,7 @@ namespace $SolutionName.AppApi.Controllers
                    var result = new AcknowledgeViewModel{
                       IsSuccess = false
                     };
-                    result.Messages.Add(_translator.Translate(""InvalidData"", Language))
+                    result.Messages.Add(_translator.Translate(""InvalidData"", Language));
                     return BadRequest(result);
                 }
                 var data = await _$EntityVarNameService.Update(model);

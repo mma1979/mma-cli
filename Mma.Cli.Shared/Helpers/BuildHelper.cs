@@ -83,7 +83,7 @@ USAGE:
    mma [global options] command [command options] [arguments...]
 
 VERSION:
-   {version}
+   {version.Split('+')[0]}
 
 AUTHOR:
    Mohammed Abdelhay

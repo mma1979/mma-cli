@@ -37,6 +37,8 @@ namespace $SolutionName.Services
         private readonly ICacheService _cacheService;
         private readonly IMapper _mapper;
 
+        private readonly string CACHING_PREFIX = ""$EntityName:"";
+
         public $EntityNameService(ApplicationDbContext context, ILogger<$EntityNameService> logger, ICacheService cacheService, IMapper mapper)
         {
             _context = context;
@@ -49,7 +51,7 @@ namespace $SolutionName.Services
 
         public async Task<ResultViewModel<List<$EntityNameReadModel>>> All(QueryViewModel query)
         {
-			var cacheKey = $""$EntityName:GetAll_{query.GetHashCode()}"".GetHashCode().ToString();
+			var cacheKey = $""{CACHING_PREFIX}{query.GetHashCode()}"";
             try
             {
                 var cached = _cacheService.Get<ResultViewModel<List<$EntityNameReadModel>>>(cacheKey);
@@ -60,7 +62,9 @@ namespace $SolutionName.Services
                 }
 
 
-                var data = _context.$EntitySetName.AsQueryable();
+                var data = query.ShowAll ?
+                        _context.$EntitySetName.IgnoreQueryFilters().AsQueryable() :
+                        _context.$EntitySetName.AsQueryable();
                 if (!string.IsNullOrEmpty(query.Filter))
                 {
                     data = data.Where(query.Filter);
@@ -110,7 +114,7 @@ namespace $SolutionName.Services
 
         public async Task<ResultViewModel<$EntityNameModifyModel>> Find(Expression<Func<$EntityName, bool>> predicate)
         {
-			var cacheKey = $""$EntityName:Find_{predicate.Body}"".GetHashCode().ToString();
+			var cacheKey = $""{CACHING_PREFIX}{predicate.Body.GetHashCode()}"";
             try
             {
                 var cached = _cacheService.Get<ResultViewModel<$EntityNameModifyModel>>(cacheKey);
@@ -147,7 +151,7 @@ namespace $SolutionName.Services
         }
         public async Task<ResultViewModel<$EntityNameModifyModel>> Find($PK id)
         {
-			var cacheKey = $""$EntityName:Find_{id}"".GetHashCode().ToString();
+			var cacheKey = $""{CACHING_PREFIX}{id.GetHashCode()}"";
             try
             {
 
@@ -193,7 +197,7 @@ namespace $SolutionName.Services
                 var entity = await _context.$EntitySetName.AddAsync(record);
                 _ = await _context.SaveChangesAsync();
 
-                _cacheService.Clear(""$EntityName:"");
+                _cacheService.Clear(""{CACHING_PREFIX}*"");
                 return new ()
                 {
 
@@ -238,7 +242,7 @@ namespace $SolutionName.Services
 
                 _ = await _context.SaveChangesAsync();
 
-                _cacheService.Clear(""$EntityName:"");
+                _cacheService.Clear(""{CACHING_PREFIX}*"");
 
                 return new ()
                 {
@@ -281,7 +285,7 @@ namespace $SolutionName.Services
                 _context.Entry(entity).State = EntityState.Deleted;
                 _ = await _context.SaveChangesAsync();
 
-                _cacheService.Clear(""$EntityName:"");
+                _cacheService.Clear(""{CACHING_PREFIX}*"");
 
                 return new ()
                 {

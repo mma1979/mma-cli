@@ -1,7 +1,7 @@
 # MMA CLI
 
 ![build and test](https://img.shields.io/github/actions/workflow/status/abpframework/abp/build-and-test.yml?branch=dev&style=flat-square)
-[![NuGet](https://img.shields.io/badge/nugett-v4.5.6-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
+[![NuGet](https://img.shields.io/badge/nugett-v4.5.7-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
 
 ![MMA cli](https://i.imgur.com/wxeEDiY.png)
 
@@ -158,7 +158,7 @@ Also you can use UI mode to create and manage your solutions. Select `UI` from `
 mma ui
 ````
 
-![UI Screen 1](https://imgur.com/wE6nXWF.png)
+![UI Screen 1](https://i.imgur.com/wE6nXWF.png)
 
 ![UI Screen 2](https://i.imgur.com/ARweSJu.png)
 
