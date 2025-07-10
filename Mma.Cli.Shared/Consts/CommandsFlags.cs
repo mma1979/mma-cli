@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -14,6 +14,7 @@ namespace Mma.Cli.Shared.Consts
         public const string GenerateShortHand = "g";
         public const string UI = "ui";
         public const string Import = "import";
+        public const string Watch = "watch";
 
         public const string Help = "--help";
         public const string HelpShortHand = "-h";

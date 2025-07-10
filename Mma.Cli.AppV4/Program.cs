@@ -1,7 +1,8 @@
-﻿using CliWrap;
+using CliWrap;
 using Mma.Cli.Shared.Builders;
 using Mma.Cli.Shared.Consts;
 using Mma.Cli.Shared.Helpers;
+using Mma.Cli.Shared.Services;
 using Sharprompt;
 
 using System;
@@ -79,6 +80,10 @@ namespace Mma.Cli.AppV4
                 case CommandsFlags.Import:
                     ImportFactory.New(args)
                         .Import();
+                    break;
+                
+                case CommandsFlags.Watch:
+                    ExecuteWatch();
                     break;
 
                 case CommandsFlags.Help:
@@ -181,7 +186,7 @@ namespace Mma.Cli.AppV4
                 Commands.NEW => ExecuteNew(),
                 Commands.GENERATE => ExecuteGenerate(),
                 Commands.UI => await ExecuteUI(),
-                Commands.WATCH => ExecutWatch(),
+                Commands.WATCH => ExecuteWatch(),
                 _ => ExecuteInvalidCommand()
             };
 
@@ -322,9 +327,12 @@ namespace Mma.Cli.AppV4
             return true;
         }
 
-        private static bool ExecutWatch()
+        private static bool ExecuteWatch()
         {
-            throw new NotImplementedException();
+            var solutionPath = Directory.GetCurrentDirectory();
+            var watchService = new WatchService(solutionPath);
+            watchService.Start();
+            return true;
         }
 
         private static bool ExecuteInvalidCommand()

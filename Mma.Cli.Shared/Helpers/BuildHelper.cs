@@ -1,7 +1,8 @@
-﻿using Mma.Cli.Shared.Consts;
+using Mma.Cli.Shared.Consts;
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -14,23 +15,14 @@ namespace Mma.Cli.Shared.Helpers
         public static string DetectMapper()
         {
             var solutionPath = Directory.GetCurrentDirectory();
-
             var files = Directory.GetFiles(solutionPath, "MappingProfile.cs", SearchOption.AllDirectories);
-
-            return files.Any() ?
-                Mappers.AutoMapper :
-                Mappers.Mapster;
-
+            return files.Any() ? Mappers.AutoMapper : Mappers.Mapster;
         }
 
         public static string DetectMapper(string solutionPath)
         {
             var files = Directory.GetFiles(solutionPath, "MappingProfile.cs", SearchOption.AllDirectories);
-
-            return files.Any() ?
-                Mappers.AutoMapper :
-                Mappers.Mapster;
-
+            return files.Any() ? Mappers.AutoMapper : Mappers.Mapster;
         }
 
         public static string GetExecutablePath()
@@ -44,28 +36,27 @@ namespace Mma.Cli.Shared.Helpers
            componentName.EndsWith("y") ? $"{componentName.TrimEnd('y')}ies" :
            $"{componentName}s";
 
+        public static string GetSolutionName(string solutionPath)
+        {
+            var slnFiles = Directory.GetFiles(solutionPath, "*.sln", SearchOption.TopDirectoryOnly);
+            if (slnFiles.Length == 0)
+            {
+                Output.Error("ERROR: The current working directory does not contain a solution file.");
+                Environment.Exit(-1);
+            }
+            var slnName = Path.GetFileNameWithoutExtension(slnFiles[0]);
+            return slnName;
+        }
+
         public static (string solutionName, string projectsPath) CheckSolutionPath(string solutionPath)
         {
-            var sln = Directory.GetFiles(solutionPath, "*.sln", SearchOption.TopDirectoryOnly);
-            if (sln.Length <= 0)
-            {
-                Output.Error(
-                    "ERROR: The current working directory does not contain a solution file");
-
-                Environment.Exit(-1);
-
-                return (string.Empty, string.Empty);
-            }
-
-            var slnName = new FileInfo(sln[0]).Name;
-            var solutionName = slnName.AsSpan(0, slnName.Length - 4).ToString();
+            var solutionName = GetSolutionName(solutionPath);
             var projectsPath = Path.Combine(solutionPath, solutionName);
-
             return (solutionName, projectsPath);
         }
+
         public static void Help(string version)
         {
-
             Output.Warning($"""
 
 .___  ___. .___  ___.      ___      
