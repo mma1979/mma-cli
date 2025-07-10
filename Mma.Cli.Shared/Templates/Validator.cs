@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,14 +10,14 @@ namespace Mma.Cli.Shared.Templates
     {
         public const string Template = @"using FluentValidation;
 
-using $SolutionName.Core.Database.Tables;
+using {{ SolutionName }}.Core.Database.Tables;
 
-namespace $SolutionName.Core.Validations
+namespace {{ SolutionName }}.Core.Validations
 {
-    public class $EntityNameValidator:AbstractValidator<$EntityNameModifyModel>
+    public class {{ EntityName }}Validator:AbstractValidator<{{ EntityName }}ModifyModel>
     {
 
-        public $EntityNameValidator()
+        public {{ EntityName }}Validator()
         {
            
         }

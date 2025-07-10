@@ -1,9 +1,9 @@
-﻿using Mma.Cli.Shared.Consts;
+using Mma.Cli.Shared.Consts;
 using Mma.Cli.Shared.Helpers;
 using Mma.Cli.Shared.Templates;
 using Mma.Cli.Shared.Templates.AutoMapper;
 using Mma.Cli.Shared.Templates.Mappster;
-
+using Scriban;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -90,48 +90,34 @@ namespace Mma.Cli.Shared.Builders
 
         public EntityBuilder GenerateModels()
         {
-            var fileName = Mapper switch
+            var model = new { SolutionName, EntityName = ComponentName, PK = PkType };
+            var modifyTemplate = Mapper is Mappers.Mapster ? Templates.Mappster.ModifyModel.Template : Templates.AutoMapper.ModifyModel.Template;
+            var readTemplate = Mapper is Mappers.Mapster ? Templates.Mappster.ReadModel.Template : Templates.AutoMapper.ReadModel.Template;
+
+            var modifyResult = Template.Parse(modifyTemplate).Render(model);
+            var readResult = Template.Parse(readTemplate).Render(model);
+
+            var modifyFileName = Mapper switch
             {
                 Mappers.Mapster => $"{ComponentName}ModifyModel.g.cs",
                 _ => $"{ComponentName}ModifyModel.cs"
             };
-            var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", fileName);
-
-            using StreamWriter writer = new(path);
-            writer.Write(
-               (Mapper is Mappers.Mapster ? Templates.Mappster.ModifyModel.Template : Templates.AutoMapper.ModifyModel.Template)
-                    .Replace("$SolutionName", SolutionName)
-                    .Replace("$EntityName", ComponentName)
-                    .Replace("$PK", PkType)
-            );
-            writer.Flush();
-            writer.Close();
-
-            void BuildReadModel()
+            var readFileName = Mapper switch
             {
-                var fileName = Mapper switch
-                {
-                    Mappers.Mapster => $"{ComponentName}ReadModel.g.cs",
-                    _ => $"{ComponentName}ReadModel.cs"
-                };
-                var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models",fileName);
-                using StreamWriter writer = new(path);
-                writer.Write(
-                     (Mapper is Mappers.Mapster ? Templates.Mappster.ReadModel.Template : Templates.AutoMapper.ReadModel.Template)
-                        .Replace("$SolutionName", SolutionName)
-                        .Replace("$EntityName", ComponentName)
-                        .Replace("$PK", PkType)
-                );
-                writer.Flush();
-                writer.Close();
-            }
-            BuildReadModel();
+                Mappers.Mapster => $"{ComponentName}ReadModel.g.cs",
+                _ => $"{ComponentName}ReadModel.cs"
+            };
+
+            var modifyPath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", modifyFileName);
+            var readPath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", readFileName);
+
+            File.WriteAllText(modifyPath, modifyResult);
+            File.WriteAllText(readPath, readResult);
+
             if (Mapper == Mappers.AutoMapper)
             {
-                
                 BuildAutoMapperProfile();
             }
-
 
             return this;
         }
@@ -139,193 +125,84 @@ namespace Mma.Cli.Shared.Builders
         private void BuildAutoMapperProfile()
         {
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "MappingProfile.cs");
-            List<string> ReadLines()
-            {
-
-                using StreamReader sr = new(path);
-                var lines = new List<string>();
-                while (true)
-                {
-                    var line = sr.ReadLine();
-                    if (line is null) break;
-                    lines.Add(line);
-                }
-                sr.Close();
-
-                return lines;
-            }
-
-            void InsertAutoMapperConfig(List<string> ls)
-            {
-                var last = ls.Last(l => l.EndsWith(";"));
-                var idx = ls.IndexOf(last);
-                ls.Insert(idx + 1,
-                    Templates.AutoMapper.Config.Template
-                        .Replace("$EntityName", ComponentName));
-            }
-
-            void RewriteAutoMapperProfile(List<string> ls)
-            {
-
-
-                var content = string.Join('\n', ls);
-                using StreamWriter sw = new(path);
-                sw.Write(content);
-                sw.Flush();
-                sw.Close();
-            }
-
-            var lines = ReadLines();
-            InsertAutoMapperConfig(lines);
-            RewriteAutoMapperProfile(lines);
-
-
+            var lines = File.ReadAllLines(path).ToList();
+            var last = lines.Last(l => l.EndsWith(";"));
+            var idx = lines.IndexOf(last);
+            var template = Template.Parse(Templates.AutoMapper.Config.Template);
+            var result = template.Render(new { EntityName = ComponentName });
+            lines.Insert(idx + 1, result);
+            File.WriteAllLines(path, lines);
         }
 
         public EntityBuilder GenerateValidator()
         {
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Validations", $"{ComponentName}Validator.cs");
-
-            using StreamWriter writer = new(path);
-            writer.Write(
-                Validator.Template
-                    .Replace("$SolutionName", SolutionName)
-                    .Replace("$EntityName", ComponentName)
-            );
-            writer.Flush();
-            writer.Close();
-
+            var template = Template.Parse(Validator.Template);
+            var result = template.Render(new { SolutionName, EntityName = ComponentName });
+            File.WriteAllText(path, result);
             return this;
         }
 
         public EntityBuilder GenerateEntity()
         {
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Database", "Tables", $"{ComponentName}.cs");
-
-            var template = Mapper switch
+            var templateText = Mapper switch
             {
                 Mappers.Mapster => Templates.Mappster.Entity.Template,
                 _ => Templates.AutoMapper.Entity.Template
             };
-
-            using StreamWriter writer = new(path);
-            writer.Write(
-                template
-                    .Replace("$SolutionName", SolutionName)
-                    .Replace("$EntityName", ComponentName)
-                    .Replace("$PK", PkType)
-            );
-            writer.Flush();
-            writer.Close();
-
+            var template = Template.Parse(templateText);
+            var result = template.Render(new { SolutionName, EntityName = ComponentName, PK = PkType });
+            File.WriteAllText(path, result);
             return this;
         }
 
         public EntityBuilder GenerateEntityConfig()
         {
-
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.EntityFramework", "EntityConfigurations", $"{ComponentName}Config.cs");
-
             var entitySetName = BuildHelper.GetSetName(ComponentName);
-
-            using StreamWriter writer = new(path);
-            writer.Write(
-                (Mapper is Mappers.Mapster? MappsterEntityConfig.Template : EntityConfig.Template)
-                    .Replace("$SolutionName", SolutionName)
-                    .Replace("$EntityName", ComponentName)
-                    .Replace("$EntitySetName", entitySetName)
-            );
-            writer.Flush();
-            writer.Close();
-
+            var templateText = Mapper is Mappers.Mapster ? MappsterEntityConfig.Template : EntityConfig.Template;
+            var template = Template.Parse(templateText);
+            var result = template.Render(new { SolutionName, EntityName = ComponentName, EntitySetName = entitySetName });
+            File.WriteAllText(path, result);
             return this;
         }
-               
 
         public EntityBuilder DbContextMapping()
         {
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.EntityFramework", "ApplicationDbContext.cs");
-
-            List<string> ReadLines()
-            {
-
-                using StreamReader sr = new(path);
-                var lines = new List<string>();
-                while (true)
-                {
-                    var line = sr.ReadLine();
-                    if (line is null) break;
-                    lines.Add(line);
-                }
-                sr.Close();
-
-                return lines;
-            }
-
-            void InsertDbSetEntry(List<string> ls, string setName)
-            {
-                var last = ls.Last(l => l.Contains("public virtual DbSet<"));
-                var idx = ls.IndexOf(last);
-                ls.Insert(idx + 1,
-                    Templates.DbSetEntry.Template
-                        .Replace("$EntityName", ComponentName)
-                        .Replace("$EntitySetName", setName));
-            }
-
-            void InsertConfigEntry(List<string> ls)
-            {
-                var last = ls.Last(l => l.Contains("modelBuilder.ApplyConfiguration(new"));
-                var idx = ls.IndexOf(last);
-                ls.Insert(idx + 1,
-                    ConfigEntry.Template
-                        .Replace("$EntityName", ComponentName));
-            }
-
-            void RewriteApplicationDbContext(List<string> ls)
-            {
-                var content = string.Join('\n', ls);
-                using StreamWriter sw = new(path);
-                sw.Write(content);
-                sw.Flush();
-                sw.Close();
-            }
-
+            var lines = File.ReadAllLines(path).ToList();
             var entitySetName = BuildHelper.GetSetName(ComponentName);
-            var lines = ReadLines();
-            InsertDbSetEntry(lines, entitySetName);
-            InsertConfigEntry(lines);
-            RewriteApplicationDbContext(lines);
 
+            var dbSetTemplate = Template.Parse(Templates.DbSetEntry.Template);
+            var dbSetResult = dbSetTemplate.Render(new { EntityName = ComponentName, EntitySetName = entitySetName });
+            var lastDbSet = lines.Last(l => l.Contains("public virtual DbSet<"));
+            var dbSetIndex = lines.IndexOf(lastDbSet);
+            lines.Insert(dbSetIndex + 1, dbSetResult);
 
+            var configTemplate = Template.Parse(ConfigEntry.Template);
+            var configResult = configTemplate.Render(new { EntityName = ComponentName });
+            var lastConfig = lines.Last(l => l.Contains("modelBuilder.ApplyConfiguration(new"));
+            var configIndex = lines.IndexOf(lastConfig);
+            lines.Insert(configIndex + 1, configResult);
+
+            File.WriteAllLines(path, lines);
             return this;
         }
 
         public EntityBuilder GenerateService()
         {
-
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Services", $"{ComponentName}Service.cs");
-
             var entitySetName = BuildHelper.GetSetName(ComponentName);
             var entityNameVar = $"{ComponentName[0].ToString().ToLower()}{ComponentName.AsSpan(1).ToString()}";
-
-            var template = Mapper switch
+            var templateText = Mapper switch
             {
                 Mappers.Mapster => Templates.Mappster.Service.Template,
                 _ => Templates.AutoMapper.Service.Template
             };
-
-            using StreamWriter writer = new(path);
-            writer.Write(
-                template
-                    .Replace("$SolutionName", SolutionName)
-                    .Replace("$EntityName", ComponentName)
-                    .Replace("$EntityVarName", entityNameVar)
-                    .Replace("$EntitySetName", entitySetName)
-                    .Replace("$PK", PkType)
-            );
-            writer.Flush();
-            writer.Close();
-
+            var template = Template.Parse(templateText);
+            var result = template.Render(new { SolutionName, EntityName = ComponentName, EntityVarName = entityNameVar, EntitySetName = entitySetName, PK = PkType });
+            File.WriteAllText(path, result);
             return this;
         }
 
@@ -335,22 +212,11 @@ namespace Mma.Cli.Shared.Builders
 
             var entitySetName = BuildHelper.GetSetName(ComponentName);
             var entityNameVar = $"{ComponentName[0].ToString().ToLower()}{ComponentName.AsSpan(1).ToString()}";
-
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.AppApi", "Controllers", "v1", $"{entitySetName}Controller.cs");
-
-
-            using StreamWriter writer = new(path);
-            writer.Write(
-               (Mapper is Mappers.Mapster? MappsterController.Template:Controller.Template)
-               .Replace("$SolutionName", SolutionName)
-                    .Replace("$EntityName", ComponentName)
-                    .Replace("$EntityVarName", entityNameVar)
-                    .Replace("$EntitySetName", entitySetName)
-                    .Replace("$PK", PkType)
-            );
-            writer.Flush();
-            writer.Close();
-
+            var templateText = Mapper is Mappers.Mapster ? MappsterController.Template : Controller.Template;
+            var template = Template.Parse(templateText);
+            var result = template.Render(new { SolutionName, EntityName = ComponentName, EntityVarName = entityNameVar, EntitySetName = entitySetName, PK = PkType });
+            File.WriteAllText(path, result);
             return this;
         }
     }

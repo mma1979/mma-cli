@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,6 +8,6 @@ namespace Mma.Cli.Shared.Templates
 {
     public static class ConfigEntry
     {
-        public const string Template = "            modelBuilder.ApplyConfiguration(new $EntityNameConfig());";
+        public const string Template = "            modelBuilder.ApplyConfiguration(new {{ EntityName }}Config());";
     }
 }

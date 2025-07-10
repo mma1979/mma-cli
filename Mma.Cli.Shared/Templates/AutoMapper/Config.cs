@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,6 +8,6 @@ namespace Mma.Cli.Shared.Templates.AutoMapper
 {
     public static class Config
     {
-        public const string Template = "CreateMap<$EntityName, $EntityNameReadModel>().IgnoreAllPropertiesWithAnInaccessibleSetter().IgnoreAllSourcePropertiesWithAnInaccessibleSetter();\r\nCreateMap<$EntityName, $EntityNameModifyModel>().IgnoreAllPropertiesWithAnInaccessibleSetter().IgnoreAllSourcePropertiesWithAnInaccessibleSetter();";
+        public const string Template = "CreateMap<{{ EntityName }}, {{ EntityName }}ReadModel>().IgnoreAllPropertiesWithAnInaccessibleSetter().IgnoreAllSourcePropertiesWithAnInaccessibleSetter();\r\nCreateMap<{{ EntityName }}, {{ EntityName }}ModifyModel>().IgnoreAllPropertiesWithAnInaccessibleSetter().IgnoreAllSourcePropertiesWithAnInaccessibleSetter();";
     }
 }

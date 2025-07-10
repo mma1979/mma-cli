@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,6 +8,6 @@ namespace Mma.Cli.Shared.Templates
 {
     public static class DbSetEntry
     {
-        public const string Template = "            public virtual DbSet<$EntityName> $EntitySetName { get; set; }";
+        public const string Template = "            public virtual DbSet<{{ EntityName }}> {{ EntitySetName }} { get; set; }";
     }
 }

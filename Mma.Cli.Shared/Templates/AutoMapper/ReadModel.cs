@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,13 +9,13 @@ namespace Mma.Cli.Shared.Templates.AutoMapper
     public static class ReadModel
     {
         public const string Template = @"using System;
-using $SolutionName.Core.Database.Identity;
+using {{ SolutionName }}.Core.Database.Identity;
 
-namespace $SolutionName.Core.Database.Tables
+namespace {{ SolutionName }}.Core.Database.Tables
 {
-    public partial class $EntityNameReadModel
+    public partial class {{ EntityName }}ReadModel
     {
-        public $PK Id { get;  set; }
+        public {{ PK }} Id { get;  set; }
         public Guid? CreatedBy { get;  set; }
         public DateTime? CreatedDate { get;  set; }
         public Guid? ModifiedBy { get;  set; }

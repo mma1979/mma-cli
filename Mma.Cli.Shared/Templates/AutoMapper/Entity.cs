@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,8 +8,8 @@ namespace Mma.Cli.Shared.Templates.AutoMapper
 {
     public static class Entity
     {
-        public static string Template = @"using $SolutionName.Common;
-using $SolutionName.Core.Validations;
+        public static string Template = @"using {{ SolutionName }}.Common;
+using {{ SolutionName }}.Core.Validations;
 
 using FluentValidation.Results;
 
@@ -19,33 +19,33 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace $SolutionName.Core.Database.Tables
+namespace {{ SolutionName }}.Core.Database.Tables
 {
     
-    public class $EntityName : BaseEntity<$PK>
+    public class {{ EntityName }} : BaseEntity<{{ PK }}>
     {
         
 
 
-        $EntityNameValidator _Validator;
-        private $EntityNameValidator Validator
+        {{ EntityName }}Validator _Validator;
+        private {{ EntityName }}Validator Validator
         {
             get
             {
-                _Validator ??= new $EntityNameValidator();
+                _Validator ??= new {{ EntityName }}Validator();
                 return _Validator;
             }
         }
 
 
-        private $EntityName()
+        private {{ EntityName }}()
         {
             
         }
 
         
 
-        public $EntityName($EntityNameModifyModel model)
+        public {{ EntityName }}({{ EntityName }}ModifyModel model)
         {
             ValidationResult result = Validator.Validate(model);
             if (!result.IsValid)
@@ -59,7 +59,7 @@ namespace $SolutionName.Core.Database.Tables
 
         }
 
-        public $EntityName Update($EntityNameModifyModel model)
+        public {{ EntityName }} Update({{ EntityName }}ModifyModel model)
         {
             ValidationResult result = Validator.Validate(model);
             if (!result.IsValid)
@@ -74,7 +74,7 @@ namespace $SolutionName.Core.Database.Tables
             return this;
         }
 
-        public $EntityName Delete()
+        public {{ EntityName }} Delete()
         {
             IsDeleted = true;
             DeletedDate = DateTime.UtcNow;

@@ -1,29 +1,29 @@
-﻿namespace Mma.Cli.Shared.Templates
+namespace Mma.Cli.Shared.Templates
 {
 	public static class EntityConfig
 	{
 		public const string Template = @"using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-using $SolutionName.Core.Database.Identity;
-using $SolutionName.Core.Database.Tables;
+using {{ SolutionName }}.Core.Database.Identity;
+using {{ SolutionName }}.Core.Database.Tables;
 
-using $SolutionName.EntityFramework.Infrastrcture.ValueGenerator;
+using {{ SolutionName }}.EntityFramework.Infrastrcture.ValueGenerator;
 
-namespace $SolutionName.EntityFramework.EntityConfigurations
+namespace {{ SolutionName }}.EntityFramework.EntityConfigurations
 {
-	public class $EntityNameConfig : IEntityTypeConfiguration<$EntityName>
+	public class {{ EntityName }}Config : IEntityTypeConfiguration<{{ EntityName }}>
 	{
 		private readonly string _schema;
-		public $EntityNameConfig(string schema = ""dbo"")
+		public {{ EntityName }}Config(string schema = ""dbo"")
 		{
 			_schema = schema;
 		}
 
 	   
-		public void Configure(EntityTypeBuilder<$EntityName> builder)
+		public void Configure(EntityTypeBuilder<{{ EntityName }}> builder)
 		{
-			builder.ToTable(""$EntitySetName"", _schema);
+			builder.ToTable(""{{ EntitySetName }}"", _schema);
 			
 			/* // Uncoment if the PK is Guid
 			 builder.Property(e => e.Id)

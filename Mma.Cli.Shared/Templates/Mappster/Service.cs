@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,11 +8,11 @@ namespace Mma.Cli.Shared.Templates.Mappster
 {
     public static class Service
     {
-        public const string Template = @"using $SolutionName.Core.Database.Tables;
-using $SolutionName.Core.Models;
-using $SolutionName.EntityFramework;
-using $SolutionName.Services.Chache;
-using $SolutionName.Core.Consts;
+        public const string Template = @"using {{ SolutionName }}.Core.Database.Tables;
+using {{ SolutionName }}.Core.Models;
+using {{ SolutionName }}.EntityFramework;
+using {{ SolutionName }}.Services.Chache;
+using {{ SolutionName }}.Core.Consts;
 
 using Mapster;
 
@@ -25,20 +25,21 @@ using System.Linq;
 using System.Linq.Dynamic.Core;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 
-namespace $SolutionName.Services
+namespace {{ SolutionName }}.Services
 {
 
 
-    public class $EntityNameService
+    public class {{ EntityName }}Service
     {
 		private readonly ApplicationDbContext _context;
-        private readonly ILogger<$EntityNameService> _logger;
+        private readonly ILogger<{{ EntityName }}Service> _logger;
         private readonly ICacheService _cacheService;
 
-        private readonly string CACHING_PREFIX = ""$EntityName:"";
+        private readonly string CACHING_PREFIX = ""{{ EntityName }}:"";
 
-        public $EntityNameService(ApplicationDbContext context, ILogger<$EntityNameService> logger, ICacheService cacheService)
+        public {{ EntityName }}Service(ApplicationDbContext context, ILogger<{{ EntityName }}Service> logger, ICacheService cacheService)
         {
             _context = context;
             _logger = logger;
@@ -47,12 +48,12 @@ namespace $SolutionName.Services
 
 
 
-        public async Task<ResultViewModel<List<$EntityNameReadModel>>> All(QueryViewModel query)
+        public async Task<ResultViewModel<List<{{ EntityName }}ReadModel>>> All(QueryViewModel query)
         {
 			var cacheKey = $""{CACHING_PREFIX}{query.GetHashCode()}"";
             try
             {
-                var cached = _cacheService.Get<ResultViewModel<List<$EntityNameReadModel>>>(cacheKey);
+                var cached = _cacheService.Get<ResultViewModel<List<{{ EntityName }}ReadModel>>>(cacheKey);
 
                 if (cached != null)
                 {
@@ -61,8 +62,8 @@ namespace $SolutionName.Services
 
 
                 var data = query.ShowAll ?
-                        _context.$EntitySetName.IgnoreQueryFilters().AsQueryable() :
-                        _context.$EntitySetName.AsQueryable();
+                        _context.{{ EntitySetName }}.IgnoreQueryFilters().AsQueryable() :
+                        _context.{{ EntitySetName }}.AsQueryable();
                 if (!string.IsNullOrEmpty(query.Filter))
                 {
                     data = data.Where(query.Filter);
@@ -78,7 +79,7 @@ namespace $SolutionName.Services
                 var count = await data.CountAsync();
                 var list = await page.ToListAsync();
 
-                var result = new ResultViewModel<List<$EntityNameReadModel>>
+                var result = new ResultViewModel<List<{{ EntityName }}ReadModel>>
                 {
                     IsSuccess = true,
                     StatusCode = 200,
@@ -87,7 +88,7 @@ namespace $SolutionName.Services
                     PageSize = query.PageSize,
                     PageNumber = query.PageNumber,
                     Filter = query.Filter,
-                    Data = list.Adapt<List<$EntityNameReadModel>>()
+                    Data = list.Adapt<List<{{ EntityName }}ReadModel>>()
                 };
 
                 _cacheService.Set(cacheKey, result);
@@ -98,7 +99,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<List<$EntityNameReadModel>>
+                return new ResultViewModel<List<{{ EntityName }}ReadModel>>
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -110,25 +111,25 @@ namespace $SolutionName.Services
             }
         }
 
-        public async Task<ResultViewModel<$EntityNameModifyModel>> Find(Expression<Func<$EntityName, bool>> predicate)
+        public async Task<ResultViewModel<{{ EntityName }}ModifyModel>> Find(Expression<Func<{{ EntityName }}, bool>> predicate)
         {
 			var cacheKey = $""{CACHING_PREFIX}{predicate.Body.GetHashCode()}"";
             try
             {
-                var cached = _cacheService.Get<ResultViewModel<$EntityNameModifyModel>>(cacheKey);
+                var cached = _cacheService.Get<ResultViewModel<{{ EntityName }}ModifyModel>>(cacheKey);
 
                 if (cached != null)
                 {
                     return cached;
                 }
 
-                var data = await _context.$EntitySetName.SingleOrDefaultAsync(predicate);
-                var result = new ResultViewModel<$EntityNameModifyModel>
+                var data = await _context.{{ EntitySetName }}.SingleOrDefaultAsync(predicate);
+                var result = new ResultViewModel<{{ EntityName }}ModifyModel>
                 {
                     IsSuccess = true,
                     StatusCode = 200,
                     Messages = { ResourcesKeys.DATA_LOAD_SUCCESS },
-                    Data = data.Adapt<$EntityNameModifyModel>()
+                    Data = data.Adapt<{{ EntityName }}ModifyModel>()
                 };
 
                 _cacheService.Set(cacheKey, result);
@@ -139,7 +140,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameModifyModel>
+                return new ResultViewModel<{{ EntityName }}ModifyModel>
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -147,26 +148,26 @@ namespace $SolutionName.Services
                 };
             }
         }
-        public async Task<ResultViewModel<$EntityNameModifyModel>> Find($PK id)
+        public async Task<ResultViewModel<{{ EntityName }}ModifyModel>> Find({{ PK }} id)
         {
 			var cacheKey = $""{CACHING_PREFIX}{id.GetHashCode()}"";
             try
             {
 
-                var cached = _cacheService.Get<ResultViewModel<$EntityNameModifyModel>>(cacheKey);
+                var cached = _cacheService.Get<ResultViewModel<{{ EntityName }}ModifyModel>>(cacheKey);
 
                 if (cached != null)
                 {
                     return cached;
                 }
 
-                var data = await _context.$EntitySetName.FindAsync(id);
-                var result = new ResultViewModel<$EntityNameModifyModel>
+                var data = await _context.{{ EntitySetName }}.FindAsync(id);
+                var result = new ResultViewModel<{{ EntityName }}ModifyModel>
                 {
                     IsSuccess = true,
                     StatusCode = 200,
                     Messages = { ResourcesKeys.DATA_LOAD_SUCCESS },
-                    Data = data.Adapt<$EntityNameModifyModel>()
+                    Data = data.Adapt<{{ EntityName }}ModifyModel>()
                 };
 
                 _cacheService.Set(cacheKey, result);
@@ -177,7 +178,7 @@ namespace $SolutionName.Services
             {
 
                 _logger.LogError(ex.Message, ex);
-                return new ResultViewModel<$EntityNameModifyModel>
+                return new ResultViewModel<{{ EntityName }}ModifyModel>
                 {
                     IsSuccess = false,
                     StatusCode = 500,
@@ -187,12 +188,12 @@ namespace $SolutionName.Services
         }
 
 
-        public async Task<AcknowledgeViewModel> Add($EntityNameModifyModel dto)
+        public async Task<AcknowledgeViewModel> Add({{ EntityName }}ModifyModel dto)
         {
             try
             {
-                var $EntityVarName = new $EntityName(dto);
-                var entity = await _context.$EntitySetName.AddAsync($EntityVarName);
+                var {{ EntityVarName }} = new {{ EntityName }}(dto);
+                var entity = await _context.{{ EntitySetName }}.AddAsync({{ EntityVarName }});
                 _ = await _context.SaveChangesAsync();
 
                 _cacheService.Clear(""{CACHING_PREFIX}*"");
@@ -204,6 +205,17 @@ namespace $SolutionName.Services
                     Messages = { ResourcesKeys.DATA_SAVE_SUCCESS },
                 };
 
+            }
+            catch (HttpException ex)
+            {
+
+                _logger.LogError(ex.Message, ex);
+                return new()
+                {
+                    IsSuccess = false,
+                    StatusCode = 500,
+                    Messages = JsonConvert.DeserializeObject<List<string>>(ex.Message),
+                };
             }
             catch (Exception ex)
             {
@@ -218,16 +230,16 @@ namespace $SolutionName.Services
             }
         }
 
-        public async Task<AcknowledgeViewModel> Update($EntityNameModifyModel dto)
+        public async Task<AcknowledgeViewModel> Update({{ EntityName }}ModifyModel dto)
         {
             try
             {
-                var $EntityVarName = await _context.$EntitySetName.FindAsync(dto.Id);
-                if ($EntityVarName == null)
+                var {{ EntityVarName }} = await _context.{{ EntitySetName }}.FindAsync(dto.Id);
+                if ({{ EntityVarName }} == null)
                 {
                     var exp = new KeyNotFoundException($""item number {dto.Id} does not Exist"");
                     _logger.LogError(exp.Message, exp);
-                    return new ResultViewModel<$EntityNameModifyModel>
+                    return new ResultViewModel<{{ EntityName }}ModifyModel>
                     {
                         IsSuccess = false,
                         StatusCode = 500,
@@ -236,7 +248,7 @@ namespace $SolutionName.Services
                 }
 
 
-                var entity = $EntityVarName.Update(dto);
+                var entity = {{ EntityVarName }}.Update(dto);
 
                 _ = await _context.SaveChangesAsync();
 
@@ -250,6 +262,17 @@ namespace $SolutionName.Services
                 };
 
             }
+            catch (HttpException ex)
+            {
+
+                _logger.LogError(ex.Message, ex);
+                return new()
+                {
+                    IsSuccess = false,
+                    StatusCode = 500,
+                    Messages = JsonConvert.DeserializeObject<List<string>>(ex.Message),
+                };
+            }
             catch (Exception ex)
             {
 
@@ -263,23 +286,23 @@ namespace $SolutionName.Services
             }
         }
 
-        public async Task<AcknowledgeViewModel> Delete($PK id)
+        public async Task<AcknowledgeViewModel> Delete({{ PK }} id)
         {
             try
             {
-                var $EntityVarName = await _context.$EntitySetName.FindAsync(id);
-                if ($EntityVarName == null)
+                var {{ EntityVarName }} = await _context.{{ EntitySetName }}.FindAsync(id);
+                if ({{ EntityVarName }} == null)
                 {
                     var exp = new KeyNotFoundException($""item number {id} does not Exist"");
                     _logger.LogError(exp.Message, exp);
-                    return new ResultViewModel<$EntityNameModifyModel>
+                    return new ResultViewModel<{{ EntityName }}ModifyModel>
                     {
                         IsSuccess = false,
                         StatusCode = 500,
                         Messages = { ResourcesKeys.ITEM_NOT_FOUND },
                     };
                 }
-                var entity = $EntityVarName.Delete();
+                var entity = {{ EntityVarName }}.Delete();
                 _context.Entry(entity).State = EntityState.Deleted;
                 _ = await _context.SaveChangesAsync();
 
@@ -290,7 +313,7 @@ namespace $SolutionName.Services
                     IsSuccess = true,
                     StatusCode = 200,
                     Messages = { ResourcesKeys.DATA_REMOVE_SUCCESS },
-                    Data = entity.Adapt<$EntityNameModifyModel>()
+                    Data = entity.Adapt<{{ EntityName }}ModifyModel>()
                 };
 
             }

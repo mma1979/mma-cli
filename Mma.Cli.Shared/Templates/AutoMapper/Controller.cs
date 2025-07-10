@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,40 +8,43 @@ namespace Mma.Cli.Shared.Templates.AutoMapper
 {
     public static class Controller
     {
-        public static string Template = @"using $SolutionName.AppApi.Controllers.v1;
-using $SolutionName.Common;
-using $SolutionName.AppApi.Services;
-using $SolutionName.Core.Database.Tables;
-using $SolutionName.Core.Models;
-using $SolutionName.Services;
-using $SolutionName.Core.Consts;
-using $SolutionName.Common.Extensions;
+        public static string Template = @"using {{ SolutionName }}.AppApi.Controllers.v1;
+using {{ SolutionName }}.Common;
+using {{ SolutionName }}.AppApi.Services;
+using {{ SolutionName }}.Core.Database.Tables;
+using {{ SolutionName }}.Core.Models;
+using {{ SolutionName }}.Services;
+using {{ SolutionName }}.Core.Consts;
+using {{ SolutionName }}.Common.Extensions;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+
+using Asp.Versioning;
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using $SolutionName.AppApi.Infrastrcture.Attributes;
+using {{ SolutionName }}.AppApi.Infrastrcture.Attributes;
 
 using System.Security.Claims;
 
-namespace $SolutionName.AppApi.Controllers
+namespace {{ SolutionName }}.AppApi.Controllers
 {
-    [Route(""api/[controller]"")]
+    [Route(""api/v{version:apiVersion}/[controller]"")]
+    [ApiVersion(1.0)]
     [ApiController]
-    public class $EntitySetNameController : BaseController
+    public class {{ EntitySetName }}Controller : BaseController
     {
-        private readonly $EntityNameService _$EntityVarNameService;
+        private readonly {{ EntityName }}Service _{{ EntityVarName }}Service;
         private readonly Translator _translator;
-        private readonly ILogger<$EntitySetNameController> _logger;
+        private readonly ILogger<{{ EntitySetName }}Controller> _logger;
 
-        public $EntitySetNameController($EntityNameService $EntityVarNameService, Translator translator, ILogger<$EntitySetNameController> logger) : base(translator)
+        public {{ EntitySetName }}Controller({{ EntityName }}Service {{ EntityVarName }}Service, Translator translator, ILogger<{{ EntitySetName }}Controller> logger) : base(translator)
         {
-            _$EntityVarNameService = $EntityVarNameService;
+            _{{ EntityVarName }}Service = {{ EntityVarName }}Service;
             _translator = translator;
             _logger = logger;
         }
@@ -64,7 +67,7 @@ namespace $SolutionName.AppApi.Controllers
             try
             {
                 query.UserId = User.FindFirstValue(""Id"").ToGuid();
-                var data = await _$EntityVarNameService.All(query);
+                var data = await _{{ EntityVarName }}Service.All(query);
                 data.Messages = data.Messages.Select(m => _translator.Translate(m, Language)).ToList();
                 if (data.IsSuccess)
                     return Ok(data);
@@ -75,13 +78,13 @@ namespace $SolutionName.AppApi.Controllers
             catch (HttpException ex)
             {
                 _logger.LogError(ex.Message, query, ex);
-                return BadRequest(HandleHttpException<List<$EntityNameReadModel>>(ex));
+                return BadRequest(HandleHttpException<List<{{ EntityName }}ReadModel>>(ex));
             }
             catch (Exception ex)
             {
 
                 _logger.LogError(ex.Message, ex);
-				var result = new ResultViewModel<List<$EntityNameReadModel>>{
+				var result = new ResultViewModel<List<{{ EntityName }}ReadModel>>{
 					IsSuccess = false,
 					StatusCode = 500
 				};
@@ -91,7 +94,7 @@ namespace $SolutionName.AppApi.Controllers
 
         [HttpGet(""{id}"")]
 		[RequiredPermission(""Read"")]
-        public async Task<IActionResult> GetOne($PK id, CancellationToken cancellationToken)
+        public async Task<IActionResult> GetOne({{ PK }} id, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
             {
@@ -104,7 +107,7 @@ namespace $SolutionName.AppApi.Controllers
             
             try
             {
-                var data = await _$EntityVarNameService.Find(id);
+                var data = await _{{ EntityVarName }}Service.Find(id);
                 data.Messages = data.Messages.Select(m => _translator.Translate(m, Language)).ToList();
 
                 if (data.IsSuccess)
@@ -118,13 +121,13 @@ namespace $SolutionName.AppApi.Controllers
             {
 
                 _logger.LogError(ex.Message, ex);
-                return BadRequest(HandleHttpException<$EntityNameReadModel>(ex));
+                return BadRequest(HandleHttpException<{{ EntityName }}ReadModel>(ex));
             }
             catch (Exception ex)
             {
 
                 _logger.LogError(ex.Message, ex);
-               var result = new ResultViewModel<List<$EntityNameReadModel>>{
+               var result = new ResultViewModel<List<{{ EntityName }}ReadModel>>{
 					IsSuccess = false,
 					StatusCode = 500
 				};
@@ -136,7 +139,7 @@ namespace $SolutionName.AppApi.Controllers
 
         [HttpPost]
 		[RequiredPermission(""Create"")]
-        public async Task<IActionResult> Post$EntityName([FromBody] $EntityNameModifyModel model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Post{{ EntityName }}([FromBody] {{ EntityName }}ModifyModel model, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
             {
@@ -149,7 +152,7 @@ namespace $SolutionName.AppApi.Controllers
            
             try
             {
-                var data = await _$EntityVarNameService.Add(model);
+                var data = await _{{ EntityVarName }}Service.Add(model);
                 data.Messages = data.Messages.Select(m => _translator.Translate(m, Language)).ToList();
 
                 if (data.IsSuccess)
@@ -179,7 +182,7 @@ namespace $SolutionName.AppApi.Controllers
 
         [HttpPut(""{id}"")]
 		[RequiredPermission(""Update"")]
-        public async Task<IActionResult> Put$EntityName($PK id, [FromBody] $EntityNameModifyModel model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Put{{ EntityName }}({{ PK }} id, [FromBody] {{ EntityName }}ModifyModel model, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
             {
@@ -201,7 +204,7 @@ namespace $SolutionName.AppApi.Controllers
                     result.Messages.Add(_translator.Translate(""InvalidData"", Language));
                     return BadRequest(result);
                 }
-                var data = await _$EntityVarNameService.Update(model);
+                var data = await _{{ EntityVarName }}Service.Update(model);
                 data.Messages = data.Messages.Select(m => _translator.Translate(m, Language)).ToList();
 
                 if (data.IsSuccess)
@@ -231,7 +234,7 @@ namespace $SolutionName.AppApi.Controllers
 
         [HttpDelete(""{id}"")]
 		[RequiredPermission(""Update,Delete"")]
-        public async Task<IActionResult> Delete$EntityName($PK id, CancellationToken cancellationToken)
+        public async Task<IActionResult> Delete{{ EntityName }}({{ PK }} id, CancellationToken cancellationToken)
         {
 			if (cancellationToken.IsCancellationRequested)
             {
@@ -245,7 +248,7 @@ namespace $SolutionName.AppApi.Controllers
             
             try
             {
-                var data = await _$EntityVarNameService.Delete(id);
+                var data = await _{{ EntityVarName }}Service.Delete(id);
                 data.Messages = data.Messages.Select(m => _translator.Translate(m, Language)).ToList();
 
                 if (data.IsSuccess)
