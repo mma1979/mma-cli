@@ -1,7 +1,7 @@
 # MMA CLI
 
 ![build and test](https://img.shields.io/github/actions/workflow/status/abpframework/abp/build-and-test.yml?branch=dev&style=flat-square)
-[![NuGet](https://img.shields.io/badge/nugett-v4.5.7-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
+[![NuGet](https://img.shields.io/badge/nugett-v4.5.9-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
 
 ![MMA cli](https://i.imgur.com/wxeEDiY.png)
 
@@ -18,6 +18,8 @@
 MMA Cli is a complete **Code Generator** based on **ASP.NET Core** to create **modern APIs** by following the software development **best practices** and the **latest technologies**.
 
 # Change Log:
+- Added `watch` command to watch for changes in entities and update models.
+- Refactored code generation to use Scriban templating engine.
 - Improved migration process and enrich with notifications
 - Databse first mode has been added to `UI` mode using `Import form Database' option
 ![MMA cli UI](https://i.imgur.com/ZqG95uM.png)
@@ -156,6 +158,14 @@ Also you can use UI mode to create and manage your solutions. Select `UI` from `
 
 ````bash
 mma ui
+````
+
+### Watch
+
+You can use watch mode to automatically update your `Read` and `Modify` models when you change your entities.
+
+````bash
+mma watch
 ````
 
 ![UI Screen 1](https://i.imgur.com/wE6nXWF.png)
