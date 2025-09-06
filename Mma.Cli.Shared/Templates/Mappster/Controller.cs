@@ -51,45 +51,55 @@ namespace $SolutionName.AppApi.Controllers
 
 
         [HttpGet]
-		[RequiredPermission(""Read"")]
-        public async Task<IActionResult> GetAll([FromQuery] QueryViewModel query, CancellationToken cancellationToken)
-        {
-			if (cancellationToken.IsCancellationRequested)
-            {
-                return BadRequest(new
-                {
-                    IsSuccess = false,
-                    Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
-                });
-            }
-            
-            try
-            {
-                query.UserId = User.FindFirstValue(""Id"").ToGuid();
-                var data = await _$EntityVarNameService.All(query);
-                data.Messages = data.Messages.Select(m => _translator.Translate(m, Language)).ToList();
-                if (data.IsSuccess)
-                    return Ok(data);
+[RequiredPermission(""Read"")]
+public async Task<IActionResult> GetAll([FromQuery] QueryViewModel query, CancellationToken cancellationToken)
+{
+	if (cancellationToken.IsCancellationRequested)
+	{
+		return BadRequest(new
+		{
+			IsSuccess = false,
+			Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
+		});
+	}
+	
+	try
+	{
+		query.UserId = User.FindFirstValue(""Id"").ToGuid();
+	   if(string.IsNullOrEmpty(query.Fields))
+		{
+			var data = await _$EntityVarNameService.All(query);
+			data.Messages = [.. data.Messages.Select(m => _translator.Translate(m, Language))];
+			if (data.IsSuccess)
+				return Ok(data);
 
-                return BadRequest(data);
+			return BadRequest(data);
+		}
 
-            }
-            catch (HttpException ex)
-            {
-                _logger.LogError(ex.Message, query, ex);
-                return BadRequest(HandleHttpException<List<$EntityNameReadModel>>(ex));
-            }
-            catch (Exception ex)
-            {
+		var selectedData = await _$EntityVarNameService.Select(query);
+		selectedData.Messages = [.. selectedData.Messages.Select(m => _translator.Translate(m, Language))];
+		if (selectedData.IsSuccess)
+			return Ok(selectedData);
 
-                _logger.LogError(ex.Message, ex);
-				var result = new ResultViewModel<List<$EntityNameReadModel>>{
-					IsSuccess = false,
-					StatusCode = 500
-				};
-                return BadRequest(result);
-            }
-        }
+		return BadRequest(selectedData);
+
+	}
+	catch (HttpException ex)
+	{
+		_logger.LogError(ex.Message, query, ex);
+		return BadRequest(HandleHttpException<List<$EntityNameReadModel>>(ex));
+	}
+	catch (Exception ex)
+	{
+
+		_logger.LogError(ex.Message, ex);
+		var result = new ResultViewModel<List<$EntityNameReadModel>>{
+			IsSuccess = false,
+			StatusCode = 500
+		};
+		return BadRequest(result);
+	}
+}
 
         [HttpGet(""{id}"")]
 		[RequiredPermission(""Read"")]

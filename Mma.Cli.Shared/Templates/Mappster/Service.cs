@@ -110,6 +110,69 @@ namespace $SolutionName.Services
             }
         }
 
+        public async Task<ResultViewModel<List<dynamic>>> Select(QueryViewModel query)
+{
+	var cacheKey = $""{CACHING_PREFIX}-select{query.GetHashCode()}"";
+	try
+	{
+		var cached = _cacheService.Get<ResultViewModel<List<dynamic>>>(cacheKey);
+
+		if (cached != null)
+		{
+			return cached;
+		}
+
+
+		var data = query.ShowAll ?
+				_context.$EntitySetName.IgnoreQueryFilters().AsQueryable() :
+				_context.$EntitySetName.AsQueryable();
+		if (!string.IsNullOrEmpty(query.Filter))
+		{
+			data = data.Where(query.Filter);
+		}
+
+		query.Order = string.IsNullOrEmpty(query.Order) ? ""CreatedDate Desc"" : query.Order;
+		data = data.OrderBy(query.Order);
+
+		var page = query.PageNumber <= 0 ? data :
+				   data.Skip((query.PageNumber - 1) * query.PageSize)
+				   .Take(query.PageSize);
+
+		var count = await data.CountAsync();
+		var list = await page.Select($""new({query.Fields}"").ToDynamicListAsync();
+
+		var result = new ResultViewModel<List<dynamic>>
+		{
+			IsSuccess = true,
+			StatusCode = 200,
+			Messages = { ResourcesKeys.DATA_LOAD_SUCCESS },
+			Total = count,
+			PageSize = query.PageSize,
+			PageNumber = query.PageNumber,
+			Filter = query.Filter,
+			Data = list
+		};
+
+		_cacheService.Set(cacheKey, result);
+
+		return result;
+	}
+	catch (Exception ex)
+	{
+
+		_logger.LogError(ex.Message, ex);
+		return new()
+		{
+			IsSuccess = false,
+			StatusCode = 500,
+			Messages = { ResourcesKeys.DATA_READ_ERROR },
+			Filter = query.Filter,
+			PageNumber = query.PageNumber,
+			PageSize = query.PageSize,
+		};
+	}
+}
+
         public async Task<ResultViewModel<$EntityNameModifyModel>> Find(Expression<Func<$EntityName, bool>> predicate)
         {
 			var cacheKey = $""{CACHING_PREFIX}{predicate.Body.GetHashCode()}"";
