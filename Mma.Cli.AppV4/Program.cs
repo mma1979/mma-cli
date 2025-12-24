@@ -1,96 +1,205 @@
 ﻿using CliWrap;
+
 using Mma.Cli.Shared.Builders;
 using Mma.Cli.Shared.Consts;
 using Mma.Cli.Shared.Helpers;
+
 using Sharprompt;
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 
-namespace Mma.Cli.AppV4
+public class Program
 {
-    public class Program
+    private static readonly string Version = Assembly.GetEntryAssembly()!
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unknown";
+
+    static async Task Main(string[] args)
     {
+        Console.CancelKeyPress += OnCancelKeyPress;
 
-        static async Task Main(string[] args)
+        try
         {
-            // AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
-            Console.CancelKeyPress += OnCancelKeyPress;
+            var exitCode = args.Length > 0
+                ? await HandleCommandLineAsync(args)
+                : await HandleInteractiveModeAsync();
 
-            if (args.Length <= 0)
+            Environment.Exit(exitCode);
+        }
+        catch (Exception ex)
+        {
+            Output.Error($"An error occurred: {ex.Message}");
+            Environment.Exit(-1);
+        }
+    }
+
+    private static void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
+    {
+        KillProcessesByName("dotnet", "mma-cli");
+    }
+
+    private static void KillProcessesByName(params string[] processNames)
+    {
+        foreach (var processName in processNames)
+        {
+            try
             {
-                await InteractiveSession();
+                var processes = Process.GetProcessesByName(processName);
+                foreach (var process in processes)
+                {
+                    process.Kill();
+                    process.Dispose();
+                }
             }
-            else
+            catch (Exception ex)
             {
-                await CommandLineSession(args);
+                Console.WriteLine($"Failed to kill {processName}: {ex.Message}");
             }
+        }
+    }
 
+    private static async Task<int> HandleCommandLineAsync(string[] args)
+    {
+        var command = args[0].ToLowerInvariant();
 
+        return command switch
+        {
+            CommandsFlags.New or CommandsFlags.NewShortHand => HandleNewCommand(args),
+            CommandsFlags.Generate or CommandsFlags.GenerateShortHand => HandleGenerateCommand(args),
+            CommandsFlags.UI => await HandleUICommand(),
+            CommandsFlags.Import => HandleImportCommand(args),
+            CommandsFlags.Help or CommandsFlags.HelpShortHand => HandleHelpCommand(),
+            CommandsFlags.Version or CommandsFlags.VersionShortHand => HandleVersionCommand(),
+            _ => HandleInvalidCommand()
+        };
+    }
+
+    private static int HandleNewCommand(string[] args)
+    {
+        SolutionBuilder.New(args)
+            .CreateSolutionDirectory()
+            .ExtractSolution()
+            .RootRenameAndReplace()
+            .RenameProjects()
+            .RenameCsprojFiles()
+            .ReplaceNamespaces()
+            .CreateMmaFolder();
+
+        Output.Success("Solution Created");
+        return 0;
+    }
+
+    private static int HandleGenerateCommand(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Output.Error("Generate command requires a component type");
+            return -1;
         }
 
-        private static void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
+        var component = args[1].ToLowerInvariant();
+
+        return component switch
         {
+            ComponentFlags.Entity or ComponentFlags.EntityShortHand => HandleEntityGeneration(args),
+            ComponentFlags.Property or ComponentFlags.PropertyShortHand => HandlePropertyGeneration(args),
+            ComponentFlags.Relation or ComponentFlags.RelationShortHand => HandleRelationGeneration(args),
+            _ => HandleInvalidComponent()
+        };
+    }
 
-            var dotnet = Process.GetProcessesByName("dotnet").ToList();
-            var mma = Process.GetProcessesByName("mma-cli").ToList();
-            if (dotnet.Any())
-                dotnet.ForEach(p => p.Kill());
+    private static int HandleEntityGeneration(string[] args)
+    {
+        EntityBuilder.New(args)
+            .GenerateModels()
+            .GenerateValidator()
+            .GenerateEntity()
+            .GenerateEntityConfig()
+            .DbContextMapping()
+            .GenerateService()
+            .GenerateController(!args.Contains(Flags.ApiFlag));
 
-            if (mma.Any())
-                mma.ForEach(p => p.Kill());
+        Output.Success("Entity files generated");
+        return 0;
+    }
 
+    private static int HandlePropertyGeneration(string[] args)
+    {
+        try
+        {
+            PropertiesBuilder.New(args, BuildHelper.DetectMapper())
+                .UpdateEntityModels()
+                .UpdateEntity()
+                .UpdateEntityConfig();
+
+            Output.Success("Property has been generated");
+            return 0;
         }
-
-       
-        private static async Task CommandLineSession(string[] args)
+        catch (Exception ex)
         {
-            switch (args[0])
-            {
-                case CommandsFlags.New:
-                case CommandsFlags.NewShortHand:
-                    SolutionBuilder.New(args)
-                        .CreateSolutionDirectory()
-                        .ExtractSolution()
-                        .RootRenameAndReplace()
-                        .RenameProjects()
-                        .RenameCsprojFiles()
-                        .ReplaceNamespaces()
-                        .CreateMmaFolder();
+            Output.Error($"Property generation failed: {ex.Message}");
+            return -1;
+        }
+    }
 
-                    Output.Success("Solution Created");
-                    Environment.Exit(0);
+    private static int HandleRelationGeneration(string[] args)
+    {
+        RelationsBuilder.New(args)
+            .UpdateParentDtos()
+            .UpdateChildDtos()
+            .UpdateParentEntity()
+            .UpdateChildEntity()
+            .UpdateParentEntityConfig();
 
-                    break;
+        Output.Success("Relation has been generated");
+        return 0;
+    }
 
-                case CommandsFlags.Generate:
-                case CommandsFlags.GenerateShortHand:
-                    HandleGenerate(args);
-                    break;
+    private static int HandleImportCommand(string[] args)
+    {
+        ImportFactory.New(args).Import();
+        return 0;
+    }
 
-                case CommandsFlags.UI:
-                    await ExecuteUI();
-                    break;
+    private static async Task<int> HandleUICommand()
+    {
+        try
+        {
+            var executablePath = BuildHelper.GetExecutablePath();
 
-                case CommandsFlags.Import:
-                    ImportFactory.New(args)
-                        .Import();
-                    break;
+            await CliWrap.Cli.Wrap("dotnet")
+                .WithWorkingDirectory(Path.Combine(executablePath, "UI"))
+                .WithArguments("cli-ui.dll")
+                .WithStandardOutputPipe(PipeTarget.ToDelegate(_ => {
+                    Console.Clear();
+                    Output.Success("Now listening on: http://localhost:5000");
+                }))
+                .WithStandardErrorPipe(PipeTarget.ToDelegate(Output.Error))
+                .ExecuteAsync();
 
-                case CommandsFlags.Help:
-                case CommandsFlags.HelpShortHand:
-                    BuildHelper.Help(version);
-                    Environment.Exit(0);
-                    break;
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Output.Error($"UI execution failed: {ex.Message}");
+            return -1;
+        }
+    }
 
-                case CommandsFlags.Version:
-                case CommandsFlags.VersionShortHand:
-                    Output.Success($"""
+    private static int HandleHelpCommand()
+    {
+        BuildHelper.Help(Version);
+        return 0;
+    }
 
+    private static int HandleVersionCommand()
+    {
+        Output.Success($"""
 .___  ___. .___  ___.      ___      
 |   \/   | |   \/   |     /   \     
 |  \  /  | |  \  /  |    /  ^  \    
@@ -98,244 +207,184 @@ namespace Mma.Cli.AppV4
 |  |  |  | |  |  |  |  /  _____  \  
 |__|  |__| |__|  |__| /__/     \__\ 
 
-
-   mma {version.Split('+')[0]}
-
-
+   mma {Version.Split('+')[0]}
 """);
-                    Environment.Exit(0);
-                    break;
+        return 0;
+    }
 
-                default:
-                    Output.Error("Invalid Command");
-                    BuildHelper.Help(version);
-                    Environment.Exit(0);
-                    break;
-            }
-        }
+    private static int HandleInvalidCommand()
+    {
+        Output.Error("Invalid Command");
+        BuildHelper.Help(Version);
+        return -1;
+    }
 
+    private static int HandleInvalidComponent()
+    {
+        Output.Error("Invalid Component");
+        BuildHelper.Help(Version);
+        return -1;
+    }
 
-        private static void HandleGenerate(string[] args)
+    private static async Task<int> HandleInteractiveModeAsync()
+    {
+        var command = Prompt.Select("Select your command",
+            new[] { Commands.NEW, Commands.GENERATE, Commands.UI, Commands.WATCH },
+            defaultValue: Commands.NEW);
+
+        return command switch
         {
-            switch (args[1])
-            {
-                case ComponentFlags.Entity:
-                case ComponentFlags.EntityShortHand:
-                    EntityBuilder.New(args)
-                    .GenerateModels()
-                    .GenerateValidator()
-                    .GenerateEntity()
-                    .GenerateEntityConfig()
-                    .DbContextMapping()
-                    .GenerateService()
-                    .GenerateController(!args.Contains(Flags.ApiFlag));
-                    Output.Success("Entity files generated");
-                    Environment.Exit(0);
-                    break;
+            Commands.NEW => HandleInteractiveNew(),
+            Commands.GENERATE => HandleInteractiveGenerate(),
+            Commands.UI => await HandleUICommand(),
+            Commands.WATCH => HandleWatch(),
+            _ => HandleInvalidCommand()
+        };
+    }
 
-                case ComponentFlags.Property:
-                case ComponentFlags.PropertyShortHand:
-                    try
-                    {
-                        PropertiesBuilder.New(args, BuildHelper.DetectMapper())
-                    .UpdateEntityModels()
-                    .UpdateEntity()
-                    .UpdateEntityConfig();
-                        Output.Success("Property has been generated");
-                        Environment.Exit(0);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine(ex);
-                        Environment.Exit(-1);
-                    }
-                    break;
+    private static int HandleInteractiveNew()
+    {
+        var solutionName = Prompt.Input<string>("Enter Solution Name");
+        var mapper = Prompt.Select("Select the Mapper",
+            new[] { Mappers.AutoMapper, Mappers.Mapster },
+            defaultValue: Mappers.AutoMapper);
 
-                case ComponentFlags.Relation:
-                case ComponentFlags.RelationShortHand:
-                    RelationsBuilder.New(args)
-                        .UpdateParentDtos()
-                        .UpdateChildDtos()
-                        .UpdateParentEntity()
-                        .UpdateChildEntity()
-                        .UpdateParentEntityConfig();
-                    Output.Success("Relation has been generated");
-                    Environment.Exit(0);
-                    break;
+        SolutionBuilder.New(solutionName, mapper)
+            .CreateSolutionDirectory()
+            .ExtractSolution()
+            .RootRenameAndReplace()
+            .RenameProjects()
+            .RenameCsprojFiles()
+            .ReplaceNamespaces()
+            .CreateMmaFolder();
 
-                default:
-                    Output.Error("Invalid Component");
-                    BuildHelper.Help(version);
-                    Environment.Exit(0);
-                    break;
+        Output.Success("Solution Created");
+        return 0;
+    }
 
+    private static int HandleInteractiveGenerate()
+    {
+        var componentType = Prompt.Select("Select Component",
+            new[] {
+                InteractiveComponents.AddEntity, InteractiveComponents.RemoveEntity,
+                InteractiveComponents.AddProperty, InteractiveComponents.RemoveProperty,
+                InteractiveComponents.AddRelation, InteractiveComponents.RemoveRelation
+            },
+            defaultValue: InteractiveComponents.AddEntity);
 
-            }
-        }
-
-        private static async Task InteractiveSession()
+        return componentType switch
         {
-            var command = Prompt.Select("Select your command", new[] { Commands.NEW, Commands.GENERATE, Commands.UI, Commands.WATCH }, defaultValue: Commands.NEW);
-            var output = command switch
-            {
-                Commands.NEW => ExecuteNew(),
-                Commands.GENERATE => ExecuteGenerate(),
-                Commands.UI => await ExecuteUI(),
-                Commands.WATCH => ExecutWatch(),
-                _ => ExecuteInvalidCommand()
-            };
+            InteractiveComponents.AddEntity => GenerateEntityInteractive(false),
+            InteractiveComponents.RemoveEntity => GenerateEntityInteractive(true),
+            InteractiveComponents.AddProperty => GeneratePropertyInteractive(false),
+            InteractiveComponents.RemoveProperty => GeneratePropertyInteractive(true),
+            InteractiveComponents.AddRelation => GenerateRelationInteractive(false),
+            InteractiveComponents.RemoveRelation => GenerateRelationInteractive(true),
+            _ => -1
+        };
+    }
 
-            Environment.Exit(output ? 0 : -1);
+    private static int GenerateEntityInteractive(bool performRemove)
+    {
+        var entityName = Prompt.Input<string>("Enter Entity Name");
+        var pkType = Prompt.Select("Select PK type",
+            new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOAT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME },
+            defaultValue: PkTypes.GUID);
+        var generateApi = Prompt.Select("Generate API controller?", new[] { "Yes", "No" }, defaultValue: "Yes") == "Yes";
 
-        }
+        var args = BuildEntityArgs(entityName, pkType, generateApi, performRemove);
 
-        private static bool ExecuteNew()
-        {
-            var solutionName = Prompt.Input<string>("Enter Solution Name");
-            var mapper = Prompt.Select("Select the Mapper", new[] { Mappers.AutoMapper, Mappers.Mapster }, defaultValue: Mappers.AutoMapper);
+        EntityBuilder.New(args)
+            .GenerateModels()
+            .GenerateValidator()
+            .GenerateEntity()
+            .GenerateEntityConfig()
+            .DbContextMapping()
+            .GenerateService()
+            .GenerateController(generateApi);
 
+        Output.Success("Entity files generated");
+        LogEquivalentCommand("entity", entityName, pkType, generateApi, performRemove);
+        return 0;
+    }
 
-            SolutionBuilder.New(solutionName, mapper)
-                .CreateSolutionDirectory()
-                .ExtractSolution()
-                .RootRenameAndReplace()
-                .RenameProjects()
-                .RenameCsprojFiles()
-                .ReplaceNamespaces()
-                .CreateMmaFolder();
+    private static int GeneratePropertyInteractive(bool performRemove)
+    {
+        var entityName = Prompt.Input<string>("Enter Entity Name");
+        var propertyName = Prompt.Input<string>("Enter Property Name");
+        var pType = Prompt.Select("Select Property type",
+            new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOAT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME },
+            defaultValue: PkTypes.GUID);
+        var nullable = Prompt.Select("Is Nullable?", new[] { "Yes", "No" }, defaultValue: "Yes") == "Yes";
 
-            Output.Success("Solution Created");
-            return true;
-        }
+        var args = BuildPropertyArgs(entityName, propertyName, pType, nullable, performRemove);
 
-        private static bool ExecuteGenerate()
-        {
-            var componetType = Prompt.Select("Select Component", new[] { InteractiveComponents.AddEntity, InteractiveComponents.RemoveEntity, InteractiveComponents.AddProperty, InteractiveComponents.RemoveProperty, InteractiveComponents.AddRelation, InteractiveComponents.RemoveRelation }, defaultValue: InteractiveComponents.AddEntity);
+        PropertiesBuilder.New(args, BuildHelper.DetectMapper())
+            .UpdateEntityModels()
+            .UpdateEntity()
+            .UpdateEntityConfig();
 
-            bool GenerateEntity(bool performRemove)
-            {
-                var entityName = Prompt.Input<string>("Enter Entity Name");
-                var pkType = Prompt.Select("Select PK type", new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOAT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME, }, defaultValue: PkTypes.GUID);
-                var generateApi = Prompt.Select("Genereate API cotroller?", new[] { "Yes", "No" }, defaultValue: "Yes");
+        Output.Success("Property has been generated");
+        LogEquivalentCommand("property", entityName, propertyName, pType, nullable, performRemove);
+        return 0;
+    }
 
-                var api = generateApi == "Yes" ? "" : "--no-api";
-                var r = performRemove ? "--remove" : "";
+    private static int GenerateRelationInteractive(bool performRemove)
+    {
+        var parentEntityName = Prompt.Input<string>("Enter Reference Entity Name");
+        var childEntityName = Prompt.Input<string>("Enter Child Entity Name");
+        var foreignKeyName = Prompt.Input<string>("Enter Foreign Key Name:");
+        var fkType = Prompt.Select("Select Foreign Key data type",
+            new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOAT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME },
+            defaultValue: PkTypes.GUID);
 
-                var mapper = BuildHelper.DetectMapper();
-                EntityBuilder.New(new[] { "g", "e", entityName, pkType, Flags.MapperFlag, mapper, api, r })
-                           .GenerateModels()
-                           .GenerateValidator()
-                           .GenerateEntity()
-                           .GenerateEntityConfig()
-                           .DbContextMapping()
-                           .GenerateService()
-                           .GenerateController(generateApi == "Yes");
-                Output.Success("Entity files generated");
-                Output.Warning($"Equivalent Commands is: \nmma g e {entityName} {pkType} --mapper {mapper} {api} {r}");
-                return true;
-            }
+        var args = BuildRelationArgs(parentEntityName, childEntityName, foreignKeyName, fkType, performRemove);
 
-            bool GenerateProperty(bool performRemove)
-            {
-                var entityName = Prompt.Input<string>("Enter Entity Name");
-                var propertyName = Prompt.Input<string>("Enter Property Name");
-                var pType = Prompt.Select("Select Property type", new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOAT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME, }, defaultValue: PkTypes.GUID);
-                var nullable = Prompt.Select("Is Nullable?", new[] { "Yes", "No" }, defaultValue: "Yes") == "Yes";
+        RelationsBuilder.New(args)
+            .UpdateParentDtos()
+            .UpdateChildDtos()
+            .UpdateParentEntity()
+            .UpdateChildEntity()
+            .UpdateParentEntityConfig();
 
-                var n = nullable ? "true" : "false";
-                var r = performRemove ? "--remove" : "";
+        Output.Success("Relation has been generated");
+        LogEquivalentCommand("relation", parentEntityName, childEntityName, foreignKeyName, fkType, performRemove);
+        return 0;
+    }
 
-                PropertiesBuilder.New(new[] { "g", "p", entityName, propertyName, pType, n, r }, BuildHelper.DetectMapper())
-                    .UpdateEntityModels()
-                    .UpdateEntity()
-                    .UpdateEntityConfig();
-                Output.Success("Property has been generated");
+    private static int HandleWatch()
+    {
+        Output.Error("Watch command is not yet implemented");
+        return -1;
+    }
 
-                Output.Warning($"Equivalent Commands is: \nmma g p {entityName} {propertyName} {pType} {n} {r}");
-                Environment.Exit(0);
-                return true;
-            }
+    // Helper methods for building command arguments
+    private static string[] BuildEntityArgs(string entityName, string pkType, bool generateApi, bool performRemove)
+    {
+        var args = new List<string> { "g", "e", entityName, pkType, Flags.MapperFlag, BuildHelper.DetectMapper() };
+        if (!generateApi) args.Add("--no-api");
+        if (performRemove) args.Add("--remove");
+        return args.ToArray();
+    }
 
-            bool GenerateRelation(bool performRemove)
-            {
-                var parentEntityName = Prompt.Input<string>("Enter Reference Entity Name");
-                var chiledEntityName = Prompt.Input<string>("Enter Child Entity Name");
-                var foreignKeyName = Prompt.Input<string>("Enter ForiegnKey Name:");
-                var fkType = Prompt.Select("Select Foreign Key data type", new[] { PkTypes.GUID, PkTypes.INT, PkTypes.LONG, PkTypes.DECIMAL, PkTypes.FLOAT, PkTypes.STRING, PkTypes.BOOL, PkTypes.DATE_TIME, }, defaultValue: PkTypes.GUID);
+    private static string[] BuildPropertyArgs(string entityName, string propertyName, string pType, bool nullable, bool performRemove)
+    {
+        var args = new List<string> { "g", "p", entityName, propertyName, pType, nullable.ToString().ToLower() };
+        if (performRemove) args.Add("--remove");
+        return args.ToArray();
+    }
 
-                var r = performRemove ? "--remove" : "";
+    private static string[] BuildRelationArgs(string parentEntity, string childEntity, string foreignKey, string fkType, bool performRemove)
+    {
+        var args = new List<string> { "g", "r", parentEntity, childEntity, foreignKey, fkType };
+        if (performRemove) args.Add("--remove");
+        return args.ToArray();
+    }
 
-                RelationsBuilder.New(new[] { "g", "r", parentEntityName, chiledEntityName, foreignKeyName, fkType, r })
-                    .UpdateParentDtos()
-                        .UpdateChildDtos()
-                        .UpdateParentEntity()
-                        .UpdateChildEntity()
-                        .UpdateParentEntityConfig();
-                Output.Success("Relation has been generated");
-                Output.Warning($"Equivalent Commands is: \nmma g r {parentEntityName} {chiledEntityName} {foreignKeyName} {fkType} {r}");
-                Environment.Exit(0);
-
-                return true;
-            }
-
-
-            var result = componetType switch
-            {
-                InteractiveComponents.AddEntity => GenerateEntity(false),
-                InteractiveComponents.RemoveEntity => GenerateEntity(true),
-                InteractiveComponents.AddProperty => GenerateProperty(false),
-                InteractiveComponents.RemoveProperty => GenerateProperty(true),
-                InteractiveComponents.AddRelation => GenerateRelation(false),
-                InteractiveComponents.RemoveRelation => GenerateRelation(true),
-                _ => false
-            };
-
-            return result;
-        }
-
-        private static async Task<bool> ExecuteUI()
-        {
-            void OutputPipe(string o)
-            {
-                Console.Clear();
-                Output.Success("Now listening on: http://localhost:5000");
-            }
-
-            void ErrorPipe(string o)
-            {
-                Output.Error(o);
-            }
-
-            string executablePath = BuildHelper.GetExecutablePath();
-            var task = CliWrap.Cli.Wrap("dotnet")
-                .WithWorkingDirectory($"{executablePath}\\UI")
-                .WithArguments(a => a.Add("cli-ui.dll"))
-                .WithStandardOutputPipe(PipeTarget.ToDelegate(OutputPipe))
-                .WithStandardErrorPipe(PipeTarget.ToDelegate(ErrorPipe))
-                .ExecuteAsync();
-
-            //processId = task.ProcessId;
-
-
-            await task;
-
-            return true;
-        }
-
-        private static bool ExecutWatch()
-        {
-            throw new NotImplementedException();
-        }
-
-        private static bool ExecuteInvalidCommand()
-        {
-            Output.Error("Invalid Command");
-            BuildHelper.Help(version);
-            return false;
-        }
-              
-
-        private static string version = Assembly.GetEntryAssembly()!
-        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.ToString();
+    private static void LogEquivalentCommand(string type, params object[] parameters)
+    {
+        var commandParts = new List<string> { "mma", "g" };
+        commandParts.AddRange(parameters.Select(p => p.ToString()));
+        Output.Warning($"Equivalent Command: {string.Join(" ", commandParts)}");
     }
 }
