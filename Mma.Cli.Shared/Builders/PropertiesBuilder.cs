@@ -11,14 +11,14 @@ namespace Mma.Cli.Shared.Builders
 {
     public class PropertiesBuilder
     {
-        public string SolutionPath { get; private set; }
-        public string SolutionName { get; private set; }
-        public string ProjectsPath { get; private set; }
-        public string Mapper { get; private set; }
+        public string SolutionPath { get; private set; } = "";
+        public string SolutionName { get; private set; } = "";
+        public string ProjectsPath { get; private set; } = "";
+        public string Mapper { get; private set; } = "";
 
-        public string EntityName { get; set; }
-        public string PropertyName { get; set; }
-        public string DataType { get; set; }
+        public string EntityName { get; set; } = "";
+        public string PropertyName { get; set; } = "";
+        public string DataType { get; set; } = "";
         public bool Nullable { get; set; }
         public bool RemoveFlag { get; set; }
 
@@ -87,10 +87,11 @@ namespace Mma.Cli.Shared.Builders
         public PropertiesBuilder UpdateEntityModels()
         {
             var property = BuildProperty(false);
+            var modelSuffix = Mapper == Mappers.Mapster ? ".g.cs" : ".cs";
 
             void UpdateModifyModel()
             {
-                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ModifyModel.cs");
+                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ModifyModel{modelSuffix}");
 
                 var lines = File.ReadAllLines(modelFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -107,7 +108,7 @@ namespace Mma.Cli.Shared.Builders
             void UpdateReadModel()
             {
 
-                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ReadModel.cs");
+                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ReadModel{modelSuffix}");
 
                 var lines = File.ReadAllLines(modelFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -123,7 +124,7 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveFromModifiyModel()
             {
-                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ModifyModel.cs");
+                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ModifyModel{modelSuffix}");
 
                 var lines = File.ReadAllLines(modelFilePath).ToList();
                 var index = lines.FindIndex(l => l.Contains(property));
@@ -143,7 +144,7 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFromReadModel()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ReadModel.cs");
+                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ReadModel{modelSuffix}");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
                 var index = lines.FindIndex(l => l.Contains(property));
@@ -266,10 +267,12 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFunction()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(assignation));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(assignation));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));

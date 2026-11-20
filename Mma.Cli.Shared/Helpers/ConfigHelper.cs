@@ -13,27 +13,17 @@ namespace Mma.Cli.Shared.Helpers
             {
                 // 1. Try Local Config
                 var localConfigPath = Path.Combine(solutionPath, ".mma", "config.json");
-                if (File.Exists(localConfigPath))
+                if (TryReadSetting(localConfigPath, key, out var localValue))
                 {
-                    var json = File.ReadAllText(localConfigPath);
-                    var config = JObject.Parse(json);
-                    if (config[key] != null)
-                    {
-                        return config[key].ToString();
-                    }
+                    return localValue;
                 }
 
                 // 2. Try Global Config
                 var globalConfigDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".mma");
                 var globalConfigPath = Path.Combine(globalConfigDir, "config.json");
-                if (File.Exists(globalConfigPath))
+                if (TryReadSetting(globalConfigPath, key, out var globalValue))
                 {
-                    var json = File.ReadAllText(globalConfigPath);
-                    var config = JObject.Parse(json);
-                    if (config[key] != null)
-                    {
-                        return config[key].ToString();
-                    }
+                    return globalValue;
                 }
             }
             catch (Exception ex)
@@ -42,6 +32,24 @@ namespace Mma.Cli.Shared.Helpers
             }
 
             return defaultValue;
+        }
+
+        private static bool TryReadSetting(string configPath, string key, out string value)
+        {
+            if (File.Exists(configPath))
+            {
+                var json = File.ReadAllText(configPath);
+                var config = JObject.Parse(json);
+                var token = config[key];
+                if (token is not null)
+                {
+                    value = token.ToString();
+                    return true;
+                }
+            }
+
+            value = string.Empty;
+            return false;
         }
     }
 }

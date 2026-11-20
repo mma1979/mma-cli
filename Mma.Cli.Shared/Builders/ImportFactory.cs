@@ -5,7 +5,6 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using RestSharp;
@@ -20,7 +19,6 @@ namespace Mma.Cli.Shared.Builders
         public string ProjectsPath { get; private set; } = "";
         public ImportFactory()
         {
-            ServicePointManager.ServerCertificateValidationCallback += (sender, certificate, chain, sslPolicyErrors) => true;
         }
 
         public static ImportFactory New(string[] args)
@@ -42,7 +40,17 @@ namespace Mma.Cli.Shared.Builders
             var body = JsonConvert.DeserializeObject<ProjectDumpModel>(json)!;
 
             var baseUrl = ConfigHelper.GetSetting(SolutionPath, "GeneratorEndpoint", "https://localhost:44357");
-            var client = new RestClient(baseUrl);
+            var allowInsecureLocalhostTls = string.Equals(
+                ConfigHelper.GetSetting(SolutionPath, "AllowInsecureLocalhostTls", "false"),
+                "true",
+                StringComparison.OrdinalIgnoreCase);
+
+            using var client = allowInsecureLocalhostTls && Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) && uri.IsLoopback
+                ? new RestClient(new RestClientOptions(baseUrl)
+                {
+                    RemoteCertificateValidationCallback = (_, _, _, _) => true
+                })
+                : new RestClient(baseUrl);
             var request = new RestRequest("api/projects/import", Method.Post);
             request.RequestFormat = DataFormat.Json;
             request.AddJsonBody(body, ContentType.Json);

@@ -34,14 +34,20 @@ namespace Mma.Cli.Shared.Builders
 
         public static SolutionBuilder New(string[] args)
         {
-            var solutionName = args[1];
-            var flags = args.Where(a => a.StartsWith("--"));
-            var mapperFlagIndex = Array.IndexOf(args, Flags.MapperFlag);
-            var mapper = args[mapperFlagIndex + 1].ToLower() switch
+            if (args.Length < 2)
             {
-                "mapster" => Mappers.Mapster,
-                _ => Mappers.AutoMapper
-            };
+                throw new ArgumentException("Solution name is required.", nameof(args));
+            }
+
+            var solutionName = args[1];
+            var mapperFlagIndex = Array.IndexOf(args, Flags.MapperFlag);
+            var mapper = mapperFlagIndex >= 0 && mapperFlagIndex + 1 < args.Length
+                ? args[mapperFlagIndex + 1].ToLower() switch
+                {
+                    "mapster" => Mappers.Mapster,
+                    _ => Mappers.AutoMapper
+                }
+                : Mappers.AutoMapper;
             SolutionBuilder sb = new(solutionName) { Mapper = mapper };
             return sb;
         }
@@ -211,12 +217,14 @@ namespace Mma.Cli.Shared.Builders
 
             File.Delete(fPath);
 
+            var normalizedName = SolutionName.ToLower().Replace(".", "-");
             using StreamWriter sw = new(fPath);
             sw.Write(content
                 .Replace("AxialSystem.Covaluse", SolutionName)
                 .Replace("MySolutionName", SolutionName)
-                .Replace("axialaystem-covaluse", SolutionName.ToLower().Replace(".", "-"))
-                .Replace("mysolutionname", SolutionName.ToLower().Replace(".", "-")));
+                .Replace("axialsystem-covaluse", normalizedName)
+                .Replace("axialaystem-covaluse", normalizedName)
+                .Replace("mysolutionname", normalizedName));
             sw.Flush();
             sw.Close();
         }

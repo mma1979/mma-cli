@@ -29,7 +29,11 @@ namespace Mma.Cli.Shared.Builders
             SolutionPath = solutionPath;
         }  
 
-        public static RelationsBuilder New(string[] args)
+        public static RelationsBuilder New(string[] args) => Initialize(new RelationsBuilder(), args);
+
+        public static RelationsBuilder New(string[] args, string solutionPath) => Initialize(new RelationsBuilder(solutionPath), args);
+
+        private static RelationsBuilder Initialize(RelationsBuilder builder, string[] args)
         {
             if (args.Length < 5)
             {
@@ -38,53 +42,29 @@ namespace Mma.Cli.Shared.Builders
                 return null;
             }
 
-            var builder = new RelationsBuilder
-            {
-                ParentEntity = args[2],
-                ChiledEntity = args[3],
-                ForeignKey = args[4],
-                ForeignDataType = args[5],
-                RemoveFlag = args.Contains(Flags.RemoveFlag)
-            };
+            builder.ParentEntity = args[2];
+            builder.ChiledEntity = args[3];
+            builder.ForeignKey = args[4];
+            builder.ForeignDataType = args.Length > 5 && !args[5].StartsWith("--", StringComparison.Ordinal)
+                ? args[5]
+                : PkTypes.GUID;
+            builder.RemoveFlag = args.Contains(Flags.RemoveFlag);
 
             (builder.SolutionName, builder.ProjectsPath) = BuildHelper.CheckSolutionPath(builder.SolutionPath);
+            builder.Mapper = BuildHelper.DetectMapper(builder.SolutionPath);
 
             return builder;
-
-        }
-
-        public static RelationsBuilder New(string[] args, string solutionPath)
-        {
-            if (args.Length < 5)
-            {
-                Output.Error("Not enough arguments use mma -h to get help");
-                Environment.Exit(-1);
-                return null;
-            }
-
-            var builder = new RelationsBuilder(solutionPath)
-            {
-                ParentEntity = args[2],
-                ChiledEntity = args[3],
-                ForeignKey = args[4],
-                ForeignDataType = args[5],
-                RemoveFlag = args.Contains(Flags.RemoveFlag)
-            };
-
-            (builder.SolutionName, builder.ProjectsPath) = BuildHelper.CheckSolutionPath(builder.SolutionPath);
-
-            return builder;
-
         }
 
         public RelationsBuilder UpdateParentDtos()
         {
 
             var navigation = BuildProperty(false, true, $"List<{ChiledEntity}>", BuildHelper.GetSetName(ChiledEntity));
+            var modelSuffix = Mapper == Mappers.Mapster ? ".g.cs" : ".cs";
 
             void UpdateModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}Dto.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}ModifyModel{modelSuffix}");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -100,7 +80,7 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveFromModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}Dto.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}ModifyModel{modelSuffix}");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var navigation_index = lines.FindIndex(l => l.Contains(navigation));
@@ -132,10 +112,11 @@ namespace Mma.Cli.Shared.Builders
             var navigation = BuildProperty(false, true, ParentEntity, ParentEntity);
 
             var foreignKey = BuildProperty(false, false, ForeignDataType, ForeignKey);
+            var modelSuffix = Mapper == Mappers.Mapster ? ".g.cs" : ".cs";
 
             void UpdateModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}Dto.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ModifyModel{modelSuffix}");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -152,7 +133,7 @@ namespace Mma.Cli.Shared.Builders
             void UpdateReadDto()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ReadModel.cs");
+                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ReadModel{modelSuffix}");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -168,7 +149,7 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveFromModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}Dto.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ModifyModel{modelSuffix}");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var index = lines.FindIndex(l => l.Contains(foreignKey));
@@ -187,7 +168,7 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFromReadDto()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}ReadModel.cs");
+                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ReadModel{modelSuffix}");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
                 var index = lines.FindIndex(l => l.Contains(foreignKey));
@@ -488,11 +469,12 @@ namespace Mma.Cli.Shared.Builders
             void RemoveConfig()
             {
                 var lines = File.ReadAllLines(path).ToList();
+                var index = lines.FindIndex(l => l.Contains(config));
 
-                var line = lines.First(l => l.Contains(config));
-                var index = lines.IndexOf(line);
-
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(path);
                 writer.Write(string.Join('\n', lines));

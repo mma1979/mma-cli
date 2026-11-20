@@ -8,7 +8,6 @@ using Sharprompt;
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -20,48 +19,38 @@ public class Program
     private static readonly string Version = Assembly.GetEntryAssembly()!
         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unknown";
 
+    private static readonly CancellationTokenSource _shutdownCts = new();
+
     static async Task Main(string[] args)
     {
         Console.CancelKeyPress += OnCancelKeyPress;
 
+        var exitCode = 0;
+
         try
         {
-            var exitCode = args.Length > 0
+            exitCode = args.Length > 0
                 ? await HandleCommandLineAsync(args)
                 : await HandleInteractiveModeAsync();
-
-            Environment.Exit(exitCode);
         }
         catch (Exception ex)
         {
             Output.Error($"An error occurred: {ex.Message}");
-            Environment.Exit(-1);
+            exitCode = -1;
         }
+        finally
+        {
+            Console.CancelKeyPress -= OnCancelKeyPress;
+            _shutdownCts.Dispose();
+        }
+
+        Environment.Exit(exitCode);
     }
 
     private static void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
     {
-        KillProcessesByName("dotnet", "mma-cli");
-    }
-
-    private static void KillProcessesByName(params string[] processNames)
-    {
-        foreach (var processName in processNames)
-        {
-            try
-            {
-                var processes = Process.GetProcessesByName(processName);
-                foreach (var process in processes)
-                {
-                    process.Kill();
-                    process.Dispose();
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to kill {processName}: {ex.Message}");
-            }
-        }
+        e.Cancel = true;
+        _shutdownCts.Cancel();
     }
 
     private static async Task<int> HandleCommandLineAsync(string[] args)
@@ -181,8 +170,12 @@ public class Program
                     Output.Success("Now listening on: http://localhost:5000");
                 }))
                 .WithStandardErrorPipe(PipeTarget.ToDelegate(Output.Error))
-                .ExecuteAsync();
+                .ExecuteAsync(_shutdownCts.Token);
 
+            return 0;
+        }
+        catch (OperationCanceledException)
+        {
             return 0;
         }
         catch (Exception ex)
@@ -391,14 +384,14 @@ public class Program
 
         watcher.EnableRaisingEvents = true;
 
-        while (true)
+        while (!_shutdownCts.IsCancellationRequested)
         {
             if (Console.KeyAvailable)
             {
                 var key = Console.ReadKey(true).Key;
                 if (key == ConsoleKey.Q) break;
             }
-            Thread.Sleep(500);
+            _shutdownCts.Token.WaitHandle.WaitOne(500);
         }
 
         return 0;

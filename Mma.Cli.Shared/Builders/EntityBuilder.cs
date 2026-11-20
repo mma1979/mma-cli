@@ -49,37 +49,26 @@ namespace Mma.Cli.Shared.Builders
             return builder;
         }
 
-        public static EntityBuilder New(string[] args)
+        public static EntityBuilder New(string[] args) => Initialize(new EntityBuilder(), args);
+
+        public static EntityBuilder New(string[] args, string solutionPath) => Initialize(new EntityBuilder(solutionPath), args);
+
+        private static EntityBuilder Initialize(EntityBuilder builder, string[] args)
         {
             var mapperFlagIndex = Array.IndexOf(args, Flags.MapperFlag);
-            var mapper = args[mapperFlagIndex + 1].ToLower() switch
-            {
-                "mapster" => Mappers.Mapster,
-                _ => Mappers.AutoMapper
-            };
-            var builder = new EntityBuilder();
+            var mapper = mapperFlagIndex >= 0 && mapperFlagIndex + 1 < args.Length
+                ? args[mapperFlagIndex + 1].ToLower() switch
+                {
+                    "mapster" => Mappers.Mapster,
+                    _ => Mappers.AutoMapper
+                }
+                : Mappers.AutoMapper;
+
             builder.ComponentType = args[1];
             builder.ComponentName = args[2];
-            builder.PkType = args.Length > 3 ? args[3] : PkTypes.GUID;
-            builder.Mapper = mapper;
-
-            (builder.SolutionName, builder.ProjectsPath) = BuildHelper.CheckSolutionPath(builder.SolutionPath);
-
-            return builder;
-        }
-
-        public static EntityBuilder New(string[] args, string solutionPath)
-        {
-            var mapperFlagIndex = Array.IndexOf(args, Flags.MapperFlag);
-            var mapper = args[mapperFlagIndex + 1].ToLower() switch
-            {
-                "mapster" => Mappers.Mapster,
-                _ => Mappers.AutoMapper
-            };
-            var builder = new EntityBuilder(solutionPath);
-            builder.ComponentType = args[1];
-            builder.ComponentName = args[2];
-            builder.PkType = args.Length > 3 ? args[3] : PkTypes.GUID;
+            builder.PkType = args.Length > 3 && !args[3].StartsWith("--", StringComparison.Ordinal)
+                ? args[3]
+                : PkTypes.GUID;
             builder.Mapper = mapper;
 
             (builder.SolutionName, builder.ProjectsPath) = BuildHelper.CheckSolutionPath(builder.SolutionPath);
