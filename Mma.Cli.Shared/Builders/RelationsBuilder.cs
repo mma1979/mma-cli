@@ -103,10 +103,12 @@ namespace Mma.Cli.Shared.Builders
                 var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}Dto.cs");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
-                var navigation_line = lines.FirstOrDefault(l => l.Contains(navigation));
-                var navigation_index = lines.IndexOf(navigation_line);
+                var navigation_index = lines.FindIndex(l => l.Contains(navigation));
 
-                lines.RemoveAt(navigation_index);
+                if (navigation_index != -1)
+                {
+                    lines.RemoveAt(navigation_index);
+                }
 
                 using StreamWriter writer = new(dtoFilePath);
                 writer.Write(string.Join('\n', lines));
@@ -169,11 +171,12 @@ namespace Mma.Cli.Shared.Builders
                 var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}Dto.cs");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
-                var line = lines.FirstOrDefault(l => l.Contains(foreignKey));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(foreignKey));
 
-
-                lines.RemoveRange(index, 2);
+                if (index != -1)
+                {
+                    lines.RemoveRange(index, 2);
+                }
 
                 using StreamWriter writer = new(dtoFilePath);
                 writer.Write(string.Join('\n', lines));
@@ -187,10 +190,12 @@ namespace Mma.Cli.Shared.Builders
                 var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}ReadModel.cs");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
-                var line = lines.FirstOrDefault(l => l.Contains(foreignKey));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(foreignKey));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(readDtoFilePath);
                 writer.Write(string.Join('\n', lines));
@@ -225,10 +230,12 @@ namespace Mma.Cli.Shared.Builders
             void UpdateProps()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"{ParentEntity}Validator _Validator;"));
-                var index = lines.IndexOf(line) - 1;
+                var index = lines.FindIndex(l => l.Contains($"{ParentEntity}Validator _Validator;")) - 1;
 
-                lines.Insert(index, navigation);
+                if (index >= 0)
+                {
+                    lines.Insert(index, navigation);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -239,10 +246,12 @@ namespace Mma.Cli.Shared.Builders
             void UpdatePublicConstractor()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"public {ParentEntity}("));
-                var index = lines.IndexOf(line) + 10;
+                var index = lines.FindIndex(l => l.Contains($"public {ParentEntity}("));
 
-                lines.Insert(index, assignation);
+                if (index != -1)
+                {
+                    lines.Insert(index + 10, assignation);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -253,10 +262,12 @@ namespace Mma.Cli.Shared.Builders
             void UpdateFunction()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"public {ParentEntity} Update("));
-                var index = lines.IndexOf(line) + 10;
+                var index = lines.FindIndex(l => l.Contains($"public {ParentEntity} Update("));
 
-                lines.Insert(index, assignation);
+                if (index != -1)
+                {
+                    lines.Insert(index + 10, assignation);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -268,10 +279,12 @@ namespace Mma.Cli.Shared.Builders
             void RemoveProps()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(navigation));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(navigation));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -282,10 +295,12 @@ namespace Mma.Cli.Shared.Builders
             void RemovePublicConstractor()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(assignation));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(assignation));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -296,10 +311,12 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFunction()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(assignation));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(assignation));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -351,13 +368,13 @@ namespace Mma.Cli.Shared.Builders
             }
             void UpdatePublicConstractor()
             {
-
-
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"public {ChiledEntity}("));
-                var index = lines.IndexOf(line) + 10;
+                var index = lines.FindIndex(l => l.Contains($"public {ChiledEntity}("));
 
-                lines.Insert(index, assignation);
+                if (index != -1)
+                {
+                    lines.Insert(index + 10, assignation);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -368,10 +385,12 @@ namespace Mma.Cli.Shared.Builders
             void UpdateFunction()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"public {ChiledEntity} Update("));
-                var index = lines.IndexOf(line) + 10;
+                var index = lines.FindIndex(l => l.Contains($"public {ChiledEntity} Update("));
 
-                lines.Insert(index, assignation);
+                if (index != -1)
+                {
+                    lines.Insert(index + 10, assignation);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -384,10 +403,12 @@ namespace Mma.Cli.Shared.Builders
             void RemoveProperties()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(foreignKey));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(foreignKey));
 
-                lines.RemoveRange(index, 2);
+                if (index != -1)
+                {
+                    lines.RemoveRange(index, 2);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -398,10 +419,12 @@ namespace Mma.Cli.Shared.Builders
             void RemovePublicConstractor()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(assignation));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(assignation));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -412,10 +435,12 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFunction()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(assignation));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(assignation));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));

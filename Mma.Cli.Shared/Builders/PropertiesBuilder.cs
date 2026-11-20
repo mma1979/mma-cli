@@ -126,10 +126,12 @@ namespace Mma.Cli.Shared.Builders
                 var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ModifyModel.cs");
 
                 var lines = File.ReadAllLines(modelFilePath).ToList();
-                var line = lines.FirstOrDefault(l => l.Contains(property));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(property));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(modelFilePath);
                 writer.Write(string.Join('\n', lines));
@@ -144,10 +146,12 @@ namespace Mma.Cli.Shared.Builders
                 var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ReadModel.cs");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
-                var line = lines.FirstOrDefault(l => l.Contains(property));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(property));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(readDtoFilePath);
                 writer.Write(string.Join('\n', lines));
@@ -181,10 +185,12 @@ namespace Mma.Cli.Shared.Builders
             void UpdateProps()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"{EntityName}Validator _Validator;"));
-                var index = lines.IndexOf(line) - 1;
+                var index = lines.FindIndex(l => l.Contains($"{EntityName}Validator _Validator;")) - 1;
 
-                lines.Insert(index, property);
+                if (index >= 0)
+                {
+                    lines.Insert(index, property);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -195,10 +201,12 @@ namespace Mma.Cli.Shared.Builders
             void UpdatePublicConstractor()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"public {EntityName}("));
-                var index = lines.IndexOf(line) + 10;
+                var index = lines.FindIndex(l => l.Contains($"public {EntityName}("));
 
-                lines.Insert(index, assignation);
+                if (index != -1)
+                {
+                    lines.Insert(index + 10, assignation);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -209,10 +217,12 @@ namespace Mma.Cli.Shared.Builders
             void UpdateFunction()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"public {EntityName} Update("));
-                var index = lines.IndexOf(line) + 10;
+                var index = lines.FindIndex(l => l.Contains($"public {EntityName} Update("));
 
-                lines.Insert(index, assignation);
+                if (index != -1)
+                {
+                    lines.Insert(index + 10, assignation);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -224,10 +234,12 @@ namespace Mma.Cli.Shared.Builders
             void RemoveProps()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(property));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(property));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -238,10 +250,12 @@ namespace Mma.Cli.Shared.Builders
             void RemovePublicConstractor()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(assignation));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(assignation));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -288,8 +302,7 @@ namespace Mma.Cli.Shared.Builders
             void UpdateConfig()
             {
                 var lines = File.ReadAllLines(path).ToList();
-                var line = lines.First(l => l.Contains("builder.HasIndex(e => e.IsDeleted);"));
-                var index = lines.IndexOf(line) + 2;
+                var index = lines.FindIndex(l => l.Contains("builder.HasIndex(e => e.IsDeleted);")) + 2;
 
                 var config = DataType switch
                 {
@@ -297,11 +310,15 @@ namespace Mma.Cli.Shared.Builders
                     PkTypes.DECIMAL => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"decimal(9,3)\");",
                     PkTypes.DATE_TIME => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"datetime\");",
                     PkTypes.GUID => $"builder.Property(e => e.{PropertyName}).HasDefaultValue(\"newid()\");",
+                    PkTypes.BYTE_ARRAY => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"varbinary(max)\");",
+                    PkTypes.TIME_SPAN => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"time\");",
                     _ => ""
-
                 };
 
-                lines.Insert(index, config);
+                if (index > 1)
+                {
+                    lines.Insert(index, config);
+                }
 
                 using StreamWriter writer = new(path);
                 writer.Write(string.Join('\n', lines));
@@ -320,14 +337,17 @@ namespace Mma.Cli.Shared.Builders
                     PkTypes.DECIMAL => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"decimal(9,3)\");",
                     PkTypes.DATE_TIME => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"datetime\");",
                     PkTypes.GUID => $"builder.Property(e => e.{PropertyName}).HasDefaultValue(\"newid()\");",
+                    PkTypes.BYTE_ARRAY => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"varbinary(max)\");",
+                    PkTypes.TIME_SPAN => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"time\");",
                     _ => ""
-
                 };
 
-                var line = lines.First(l => l.Contains(config));
-                var index = lines.IndexOf(line);
+                var index = lines.FindIndex(l => l.Contains(config));
 
-                lines.RemoveAt(index);
+                if (index != -1)
+                {
+                    lines.RemoveAt(index);
+                }
 
                 using StreamWriter writer = new(path);
                 writer.Write(string.Join('\n', lines));

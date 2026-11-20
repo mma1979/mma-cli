@@ -98,8 +98,9 @@ namespace Mma.Cli.Shared.Builders
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", fileName);
 
             using StreamWriter writer = new(path);
+            var defaultModifyTemplate = Mapper is Mappers.Mapster ? Templates.Mappster.ModifyModel.Template : Templates.AutoMapper.ModifyModel.Template;
             writer.Write(
-               (Mapper is Mappers.Mapster ? Templates.Mappster.ModifyModel.Template : Templates.AutoMapper.ModifyModel.Template)
+               TemplateHelper.GetTemplate(SolutionPath, Mapper, "ModifyModel", defaultModifyTemplate)
                     .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
                     .Replace("$PK", PkType)
@@ -115,9 +116,10 @@ namespace Mma.Cli.Shared.Builders
                     _ => $"{ComponentName}ReadModel.cs"
                 };
                 var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models",fileName);
+                var defaultReadTemplate = Mapper is Mappers.Mapster ? Templates.Mappster.ReadModel.Template : Templates.AutoMapper.ReadModel.Template;
                 using StreamWriter writer = new(path);
                 writer.Write(
-                     (Mapper is Mappers.Mapster ? Templates.Mappster.ReadModel.Template : Templates.AutoMapper.ReadModel.Template)
+                     TemplateHelper.GetTemplate(SolutionPath, Mapper, "ReadModel", defaultReadTemplate)
                         .Replace("$SolutionName", SolutionName)
                         .Replace("$EntityName", ComponentName)
                         .Replace("$PK", PkType)
@@ -160,7 +162,7 @@ namespace Mma.Cli.Shared.Builders
                 var last = ls.Last(l => l.EndsWith(";"));
                 var idx = ls.IndexOf(last);
                 ls.Insert(idx + 1,
-                    Templates.AutoMapper.Config.Template
+                    TemplateHelper.GetTemplate(SolutionPath, Mapper, "Config", Templates.AutoMapper.Config.Template)
                         .Replace("$EntityName", ComponentName));
             }
 
@@ -188,7 +190,7 @@ namespace Mma.Cli.Shared.Builders
 
             using StreamWriter writer = new(path);
             writer.Write(
-                Validator.Template
+                TemplateHelper.GetTemplate(SolutionPath, Mapper, "Validator", Validator.Template)
                     .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
             );
@@ -202,7 +204,7 @@ namespace Mma.Cli.Shared.Builders
         {
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Database", "Tables", $"{ComponentName}.cs");
 
-            var template = Mapper switch
+            var defaultEntityTemplate = Mapper switch
             {
                 Mappers.Mapster => Templates.Mappster.Entity.Template,
                 _ => Templates.AutoMapper.Entity.Template
@@ -210,7 +212,7 @@ namespace Mma.Cli.Shared.Builders
 
             using StreamWriter writer = new(path);
             writer.Write(
-                template
+                TemplateHelper.GetTemplate(SolutionPath, Mapper, "Entity", defaultEntityTemplate)
                     .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
                     .Replace("$PK", PkType)
@@ -228,9 +230,11 @@ namespace Mma.Cli.Shared.Builders
 
             var entitySetName = BuildHelper.GetSetName(ComponentName);
 
+            var defaultEntityConfigTemplate = Mapper is Mappers.Mapster ? MappsterEntityConfig.Template : EntityConfig.Template;
+
             using StreamWriter writer = new(path);
             writer.Write(
-                (Mapper is Mappers.Mapster? MappsterEntityConfig.Template : EntityConfig.Template)
+                TemplateHelper.GetTemplate(SolutionPath, Mapper, "EntityConfig", defaultEntityConfigTemplate)
                     .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
                     .Replace("$EntitySetName", entitySetName)
@@ -267,7 +271,7 @@ namespace Mma.Cli.Shared.Builders
                 var last = ls.Last(l => l.Contains("public virtual DbSet<"));
                 var idx = ls.IndexOf(last);
                 ls.Insert(idx + 1,
-                    Templates.DbSetEntry.Template
+                    TemplateHelper.GetTemplate(SolutionPath, Mapper, "DbSetEntry", Templates.DbSetEntry.Template)
                         .Replace("$EntityName", ComponentName)
                         .Replace("$EntitySetName", setName));
             }
@@ -277,7 +281,7 @@ namespace Mma.Cli.Shared.Builders
                 var last = ls.Last(l => l.Contains("modelBuilder.ApplyConfiguration(new"));
                 var idx = ls.IndexOf(last);
                 ls.Insert(idx + 1,
-                    ConfigEntry.Template
+                    TemplateHelper.GetTemplate(SolutionPath, Mapper, "ConfigEntry", ConfigEntry.Template)
                         .Replace("$EntityName", ComponentName));
             }
 
@@ -308,7 +312,7 @@ namespace Mma.Cli.Shared.Builders
             var entitySetName = BuildHelper.GetSetName(ComponentName);
             var entityNameVar = $"{ComponentName[0].ToString().ToLower()}{ComponentName.AsSpan(1).ToString()}";
 
-            var template = Mapper switch
+            var defaultServiceTemplate = Mapper switch
             {
                 Mappers.Mapster => Templates.Mappster.Service.Template,
                 _ => Templates.AutoMapper.Service.Template
@@ -316,7 +320,7 @@ namespace Mma.Cli.Shared.Builders
 
             using StreamWriter writer = new(path);
             writer.Write(
-                template
+                TemplateHelper.GetTemplate(SolutionPath, Mapper, "Service", defaultServiceTemplate)
                     .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
                     .Replace("$EntityVarName", entityNameVar)
@@ -339,9 +343,11 @@ namespace Mma.Cli.Shared.Builders
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.AppApi", "Controllers", "v1", $"{entitySetName}Controller.cs");
 
 
+            var defaultControllerTemplate = Mapper is Mappers.Mapster ? MappsterController.Template : Controller.Template;
+
             using StreamWriter writer = new(path);
             writer.Write(
-               (Mapper is Mappers.Mapster? MappsterController.Template:Controller.Template)
+               TemplateHelper.GetTemplate(SolutionPath, Mapper, "Controller", defaultControllerTemplate)
                .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
                     .Replace("$EntityVarName", entityNameVar)

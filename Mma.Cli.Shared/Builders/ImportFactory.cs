@@ -18,11 +18,8 @@ namespace Mma.Cli.Shared.Builders
         public string SolutionPath { get; private set; } = "";
         public string SolutionName { get; private set; } = "";
         public string ProjectsPath { get; private set; } = "";
-        private const string BaseUrl = "https://localhost:44357";// "http://localhost:5000";
-
         public ImportFactory()
         {
-
             ServicePointManager.ServerCertificateValidationCallback += (sender, certificate, chain, sslPolicyErrors) => true;
         }
 
@@ -40,12 +37,12 @@ namespace Mma.Cli.Shared.Builders
 
         public ImportFactory Import()
         {
-
             var mmaProjectPah = Path.Combine(SolutionPath, ".mma", "project.mma");
             var json = File.ReadAllText(mmaProjectPah, Encoding.UTF8);
             var body = JsonConvert.DeserializeObject<ProjectDumpModel>(json)!;
 
-            var client = new RestClient(BaseUrl);
+            var baseUrl = ConfigHelper.GetSetting(SolutionPath, "GeneratorEndpoint", "https://localhost:44357");
+            var client = new RestClient(baseUrl);
             var request = new RestRequest("api/projects/import", Method.Post);
             request.RequestFormat = DataFormat.Json;
             request.AddJsonBody(body, ContentType.Json);
@@ -55,12 +52,10 @@ namespace Mma.Cli.Shared.Builders
             {
                 Console.WriteLine(response.ErrorException);
                 Output.Error("Faild to Export Project");
-                Environment.Exit(-1);
                 return this;
             }
 
             Output.Success("Project has exported successfuly");
-            Environment.Exit(0);
             return this;
         }
 

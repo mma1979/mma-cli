@@ -16,5 +16,7 @@ namespace Mma.Cli.Shared.Consts
         public const string FLOAT = "float";
         public const string BOOL = "bool";
         public const string DATE_TIME = "DateTime";
+        public const string BYTE_ARRAY = "byte[]";
+        public const string TIME_SPAN = "TimeSpan";
     }
 }

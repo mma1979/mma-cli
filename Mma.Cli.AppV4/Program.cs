@@ -12,6 +12,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 public class Program
@@ -354,8 +355,53 @@ public class Program
 
     private static int HandleWatch()
     {
-        Output.Error("Watch command is not yet implemented");
-        return -1;
+        var solutionPath = Directory.GetCurrentDirectory();
+        var (solutionName, projectsPath) = BuildHelper.CheckSolutionPath(solutionPath);
+
+        var mmaPath = Path.Combine(solutionPath, ".mma");
+        if (!Directory.Exists(mmaPath))
+        {
+            Output.Error("Error: .mma folder not found. Are you in the solution root?");
+            return -1;
+        }
+
+        Output.Success($"Watching for changes in {solutionName}...");
+        Output.Warning("Press Q or Ctrl+C to stop watching.");
+
+        using var watcher = new FileSystemWatcher(mmaPath, "project.mma");
+        watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName;
+
+        DateTime lastRead = DateTime.MinValue;
+        watcher.Changed += (s, e) =>
+        {
+            // Simple debounce: 1 second
+            if (DateTime.Now - lastRead < TimeSpan.FromSeconds(1)) return;
+            lastRead = DateTime.Now;
+
+            Output.Warning("\nChange detected, re-importing...");
+            try
+            {
+                ImportFactory.New(new[] { "import", solutionPath }).Import();
+            }
+            catch (Exception ex)
+            {
+                Output.Error($"Re-import failed: {ex.Message}");
+            }
+        };
+
+        watcher.EnableRaisingEvents = true;
+
+        while (true)
+        {
+            if (Console.KeyAvailable)
+            {
+                var key = Console.ReadKey(true).Key;
+                if (key == ConsoleKey.Q) break;
+            }
+            Thread.Sleep(500);
+        }
+
+        return 0;
     }
 
     // Helper methods for building command arguments

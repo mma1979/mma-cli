@@ -1,0 +1,10 @@
+docs(architecture): add MMA CLI modernization plan and target design
+
+Produce a versioned Tier 2 modernization blueprint for MMA CLI covering
+the React + ASP.NET Core 10 BFF UI redesign, dual-transport MCP Server
+and Client capabilities, configurable multi-provider AI Agent mode on
+Microsoft.Extensions.AI, C4 Mermaid diagrams, ADRs, phased roadmap,
+and prioritized refactor and feature backlog grounded in codebase audit.
+
+Conversation-Id: 1ea6d98d
+Output-Version: v1
