@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text;
 using Mma.Cli.Core.Services;
+using Mma.Cli.Database;
 
 namespace Mma.Cli.Core.Tests;
 
@@ -41,6 +42,7 @@ public sealed class HeadlessInvariantTests
             "Newtonsoft.Json",
             "RestSharp",
             "Mma.Cli.Shared",
+            "Mma.Cli.Database",
             "Microsoft.EntityFrameworkCore",
             "Microsoft.Data.Sqlite",
             "Sharprompt"
@@ -71,9 +73,69 @@ public sealed class HeadlessInvariantTests
             "Newtonsoft.Json",
             "RestSharp",
             "Mma.Cli.Shared",
+            "Mma.Cli.Database",
             "Microsoft.EntityFrameworkCore",
             "Microsoft.EntityFrameworkCore.Sqlite",
             "Microsoft.Data.Sqlite",
+            "Sharprompt"
+        };
+
+        foreach (var forbidden in forbiddenAssemblies)
+        {
+            Assert.DoesNotContain(forbidden, referencedNames);
+        }
+    }
+
+    [Fact]
+    public void DatabaseSourceFiles_ContainZeroForbiddenHeadlessApis()
+    {
+        var dbDir = Path.Combine(FindRepoRoot(), "src", "Mma.Cli.Database");
+        var csFiles = Directory.GetFiles(dbDir, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                     && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        Assert.NotEmpty(csFiles);
+
+        var forbidden = new[]
+        {
+            "Environment.Exit",
+            "Console.",
+            "HttpContext",
+            "Newtonsoft.Json",
+            "RestSharp",
+            "Mma.Cli.Shared",
+            "Sharprompt"
+        };
+
+        foreach (var file in csFiles)
+        {
+            var raw = File.ReadAllText(file);
+            Assert.DoesNotContain("wwwroot", raw, StringComparison.OrdinalIgnoreCase);
+
+            var codeOnly = StripCommentsAndStrings(raw);
+            foreach (var token in forbidden)
+            {
+                Assert.DoesNotContain(token, codeOnly, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    [Fact]
+    public void DatabaseAssembly_ReferencesZeroForbiddenAssemblies()
+    {
+        Assembly dbAssembly = typeof(WorkspaceDbContext).Assembly;
+        var referencedNames = dbAssembly.GetReferencedAssemblies()
+            .Select(a => a.Name)
+            .Where(n => n is not null)
+            .Cast<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var forbiddenAssemblies = new[]
+        {
+            "Newtonsoft.Json",
+            "RestSharp",
+            "Mma.Cli.Shared",
             "Sharprompt"
         };
 

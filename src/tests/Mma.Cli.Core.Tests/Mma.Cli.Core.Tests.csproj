@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Mma.Cli.Core\Mma.Cli.Core.csproj" />
+    <ProjectReference Include="..\..\Mma.Cli.Database\Mma.Cli.Database.csproj" />
   </ItemGroup>
 
 </Project>

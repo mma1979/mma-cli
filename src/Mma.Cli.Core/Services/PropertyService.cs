@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Mma.Cli.Core.Contracts;
 using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Events;
+using Mma.Cli.Core.Manifest;
 using Mma.Cli.Core.Results;
 using Mma.Cli.Core.Solutions;
 
@@ -11,15 +12,21 @@ public sealed class PropertyService : IPropertyService
 {
     private readonly ISolutionLocator _solutionLocator;
     private readonly ILogger<PropertyService>? _logger;
+    private readonly ISolutionLockManager _lockManager;
+    private readonly IManifestStore _manifestStore;
 
     public PropertyService(
         ISolutionLocator solutionLocator,
-        ILogger<PropertyService>? logger = null)
+        ILogger<PropertyService>? logger = null,
+        ISolutionLockManager? lockManager = null,
+        IManifestStore? manifestStore = null)
     {
         ArgumentNullException.ThrowIfNull(solutionLocator);
 
         _solutionLocator = solutionLocator;
         _logger = logger;
+        _lockManager = lockManager ?? new SolutionLockManager();
+        _manifestStore = manifestStore ?? new ManifestStore(_lockManager, solutionLocator);
     }
 
     public async Task<OperationResult<GenerationSummary>> ApplyAsync(
@@ -91,8 +98,14 @@ public sealed class PropertyService : IPropertyService
         var assignment = $"{propertyName} = dto.{propertyName};";
         var configLine = BuildConfigLine(normalizedType, propertyName);
 
+        IAsyncDisposable? lockHandle = null;
         try
         {
+            if (!request.DryRun)
+            {
+                lockHandle = await _lockManager.AcquireAsync(info.SolutionPath, ct: ct).ConfigureAwait(false);
+            }
+
             var modifyLines = await ServiceFileHelper.ReadLinesAsync(modifyModelPath, ct).ConfigureAwait(false);
             var readLines = await ServiceFileHelper.ReadLinesAsync(readModelPath, ct).ConfigureAwait(false);
             var entityLines = await ServiceFileHelper.ReadLinesAsync(entityPath, ct).ConfigureAwait(false);
@@ -181,6 +194,51 @@ public sealed class PropertyService : IPropertyService
                     await ServiceFileHelper.WriteLinesAsync(path, lines, ct).ConfigureAwait(false);
                     ServiceFileHelper.Report(progress, GenerationStage.Updating, $"Updated {Path.GetFileName(path)}", path);
                 }
+
+                var (manifest, expectedHash, loadError) = await ServiceFileHelper.LoadOrCreateManifestAsync(
+                    _manifestStore, info, overrideMapper: null, ct).ConfigureAwait(false);
+                if (loadError is not null || manifest is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        loadError ?? new GenerationError(ErrorCodes.MANIFEST_INVALID, "Failed to load manifest."));
+                }
+
+                var entities = manifest.Entities.Select(e => e with { Properties = [.. e.Properties] }).ToList();
+                var entityEntry = ServiceFileHelper.GetOrAddEntity(entities, entityName);
+
+                if (request.Remove)
+                {
+                    entityEntry.Properties.RemoveAll(p => string.Equals(p.Name, propertyName, StringComparison.OrdinalIgnoreCase));
+                }
+                else
+                {
+                    var existingProp = entityEntry.Properties.FirstOrDefault(
+                        p => string.Equals(p.Name, propertyName, StringComparison.OrdinalIgnoreCase));
+                    ServiceFileHelper.UpsertProperty(
+                        entityEntry.Properties,
+                        new ManifestProperty(
+                            propertyName,
+                            normalizedType,
+                            Nullable: request.Nullable,
+                            IsForeignKey: existingProp?.IsForeignKey ?? false,
+                            Applied: true,
+                            MaxLength: normalizedType == "string" ? 255 : existingProp?.MaxLength,
+                            Required: existingProp?.Required));
+                }
+
+                var updatedManifest = manifest with
+                {
+                    Entities = entities,
+                    UpdatedAtUtc = DateTimeOffset.UtcNow
+                };
+
+                var saveResult = await ServiceFileHelper.SaveManifestUnderLockAsync(
+                    _manifestStore, info.SolutionPath, updatedManifest, expectedHash, ct).ConfigureAwait(false);
+                if (!saveResult.IsSuccess)
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        saveResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to synchronize manifest."));
+                }
             }
 
             ServiceFileHelper.Report(
@@ -200,6 +258,12 @@ public sealed class PropertyService : IPropertyService
             ServiceFileHelper.Report(progress, GenerationStage.Failed, "Property operation was cancelled.");
             return OperationResult<GenerationSummary>.Failure(ErrorCodes.CANCELLED, "Property operation was cancelled.");
         }
+        catch (TimeoutException ex)
+        {
+            _logger?.LogError(ex, "Lock timeout updating property '{EntityName}.{PropertyName}'.", entityName, propertyName);
+            ServiceFileHelper.Report(progress, GenerationStage.Failed, ex.Message);
+            return OperationResult<GenerationSummary>.Failure(ErrorCodes.IO_ERROR, ex.Message, ex.ToString());
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _logger?.LogError(ex, "Failed to update property '{EntityName}.{PropertyName}'.", entityName, propertyName);
@@ -208,6 +272,13 @@ public sealed class PropertyService : IPropertyService
                 ErrorCodes.IO_ERROR,
                 $"Failed to update property '{entityName}.{propertyName}': {ex.Message}",
                 ex.ToString());
+        }
+        finally
+        {
+            if (lockHandle is not null)
+            {
+                await lockHandle.DisposeAsync().ConfigureAwait(false);
+            }
         }
     }
 

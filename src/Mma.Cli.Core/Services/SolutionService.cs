@@ -1,27 +1,29 @@
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using ICSharpCode.SharpZipLib.Zip;
 using Microsoft.Extensions.Logging;
 using Mma.Cli.Core.Contracts;
 using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Events;
+using Mma.Cli.Core.Manifest;
 using Mma.Cli.Core.Results;
 
 namespace Mma.Cli.Core.Services;
 
 public sealed partial class SolutionService : ISolutionService
 {
-    private static readonly JsonSerializerOptions ManifestJsonOptions = new()
-    {
-        WriteIndented = false
-    };
-
     private readonly ILogger<SolutionService>? _logger;
+    private readonly ISolutionLockManager _lockManager;
+    private readonly IManifestStore _manifestStore;
 
-    public SolutionService(ILogger<SolutionService>? logger = null)
+    public SolutionService(
+        ILogger<SolutionService>? logger = null,
+        ISolutionLockManager? lockManager = null,
+        IManifestStore? manifestStore = null)
     {
         _logger = logger;
+        _lockManager = lockManager ?? new SolutionLockManager();
+        _manifestStore = manifestStore ?? new ManifestStore(_lockManager);
     }
 
     [GeneratedRegex(@"^.+\.(cs|json|csproj|cshtml)$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
@@ -116,85 +118,107 @@ public sealed partial class SolutionService : ISolutionService
                 Directory.CreateDirectory(solutionPath);
             }
 
-            using var zipFile = new ZipFile(resourceStream);
-            foreach (ZipEntry entry in zipFile)
+            IAsyncDisposable? lockHandle = null;
+            try
             {
-                ct.ThrowIfCancellationRequested();
-
-                if (entry.IsDirectory)
+                if (!request.DryRun)
                 {
-                    continue;
+                    lockHandle = await _lockManager.AcquireAsync(solutionPath, ct: ct).ConfigureAwait(false);
                 }
 
-                var (relativePath, isUnderProjects, isRootSln) = TransformEntryPath(
-                    entry.Name,
-                    oldRoot,
-                    request.SolutionName);
-
-                var destinationPath = Path.GetFullPath(Path.Combine(solutionPath, relativePath));
-                if (!destinationPath.StartsWith(fullSolutionPrefix, pathComparison))
+                using var zipFile = new ZipFile(resourceStream);
+                foreach (ZipEntry entry in zipFile)
                 {
-                    return OperationResult<GenerationSummary>.Failure(
-                        ErrorCodes.TEMPLATE_ERROR,
-                        $"Unsafe archive entry path detected: '{entry.Name}'.");
+                    ct.ThrowIfCancellationRequested();
+
+                    if (entry.IsDirectory)
+                    {
+                        continue;
+                    }
+
+                    var (relativePath, isUnderProjects, isRootSln) = TransformEntryPath(
+                        entry.Name,
+                        oldRoot,
+                        request.SolutionName);
+
+                    var destinationPath = Path.GetFullPath(Path.Combine(solutionPath, relativePath));
+                    if (!destinationPath.StartsWith(fullSolutionPrefix, pathComparison))
+                    {
+                        return OperationResult<GenerationSummary>.Failure(
+                            ErrorCodes.TEMPLATE_ERROR,
+                            $"Unsafe archive entry path detected: '{entry.Name}'.");
+                    }
+
+                    createdFiles.Add(destinationPath);
+
+                    if (request.DryRun)
+                    {
+                        continue;
+                    }
+
+                    var destDir = Path.GetDirectoryName(destinationPath);
+                    if (!string.IsNullOrEmpty(destDir))
+                    {
+                        Directory.CreateDirectory(destDir);
+                    }
+
+                    using var entryStream = zipFile.GetInputStream(entry);
+                    if (isRootSln || (isUnderProjects && NamespaceReplaceFileRegex().IsMatch(destinationPath)))
+                    {
+                        using var reader = new StreamReader(entryStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                        var content = await reader.ReadToEndAsync(ct).ConfigureAwait(false);
+                        var rewritten = RewritePlaceholders(content, request.SolutionName, normalizedSlug);
+                        await File.WriteAllTextAsync(destinationPath, rewritten, ServiceFileHelper.Utf8NoBom, ct)
+                            .ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        using var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                        await entryStream.CopyToAsync(fileStream, ct).ConfigureAwait(false);
+                    }
                 }
 
-                createdFiles.Add(destinationPath);
+                var manifestDir = Path.Combine(solutionPath, ".mma");
+                var manifestPath = Path.Combine(manifestDir, "project.mma");
+                createdFiles.Add(manifestPath);
 
-                if (request.DryRun)
+                if (!request.DryRun)
                 {
-                    continue;
-                }
+                    var solutionFormat = createdFiles.Any(f => f.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
+                        ? ".slnx"
+                        : ".sln";
 
-                var destDir = Path.GetDirectoryName(destinationPath);
-                if (!string.IsNullOrEmpty(destDir))
-                {
-                    Directory.CreateDirectory(destDir);
-                }
+                    var manifest = new ProjectManifest
+                    {
+                        SchemaVersion = 2,
+                        SolutionName = request.SolutionName,
+                        Mapper = request.Mapper.ToFolderName(),
+                        SolutionFormat = solutionFormat,
+                        Entities = [],
+                        Relations = [],
+                        UpdatedAtUtc = DateTimeOffset.UtcNow
+                    };
 
-                using var entryStream = zipFile.GetInputStream(entry);
-                if (isRootSln || (isUnderProjects && NamespaceReplaceFileRegex().IsMatch(destinationPath)))
-                {
-                    using var reader = new StreamReader(entryStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-                    var content = await reader.ReadToEndAsync(ct).ConfigureAwait(false);
-                    var rewritten = RewritePlaceholders(content, request.SolutionName, normalizedSlug);
-                    await File.WriteAllTextAsync(destinationPath, rewritten, ServiceFileHelper.Utf8NoBom, ct)
-                        .ConfigureAwait(false);
-                }
-                else
-                {
-                    using var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                    await entryStream.CopyToAsync(fileStream, ct).ConfigureAwait(false);
+                    var saveResult = await ServiceFileHelper.SaveManifestUnderLockAsync(
+                        _manifestStore,
+                        solutionPath,
+                        manifest,
+                        expectedHash: null,
+                        ct).ConfigureAwait(false);
+
+                    if (!saveResult.IsSuccess)
+                    {
+                        return OperationResult<GenerationSummary>.Failure(
+                            saveResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to write project manifest."));
+                    }
                 }
             }
-
-            var manifestDir = Path.Combine(solutionPath, ".mma");
-            var manifestPath = Path.Combine(manifestDir, "project.mma");
-            createdFiles.Add(manifestPath);
-
-            if (!request.DryRun)
+            finally
             {
-                var dirInfo = Directory.CreateDirectory(manifestDir);
-                if (OperatingSystem.IsWindows())
+                if (lockHandle is not null)
                 {
-                    dirInfo.Attributes = FileAttributes.Directory | FileAttributes.Hidden;
+                    await lockHandle.DisposeAsync().ConfigureAwait(false);
                 }
-
-                var manifestPayload = new
-                {
-                    Project = new
-                    {
-                        Name = request.SolutionName,
-                        Path = solutionPath
-                    },
-                    Entities = Array.Empty<object>(),
-                    Rows = Array.Empty<object>(),
-                    Relations = Array.Empty<object>(),
-                    mapper = request.Mapper.ToFolderName()
-                };
-
-                var json = JsonSerializer.Serialize(manifestPayload, ManifestJsonOptions);
-                await File.WriteAllTextAsync(manifestPath, json, ServiceFileHelper.Utf8NoBom, ct).ConfigureAwait(false);
             }
 
             ServiceFileHelper.Report(
@@ -213,6 +237,11 @@ public sealed partial class SolutionService : ISolutionService
         {
             ServiceFileHelper.Report(progress, GenerationStage.Failed, "Solution creation was cancelled.");
             return OperationResult<GenerationSummary>.Failure(ErrorCodes.CANCELLED, "Solution creation was cancelled.");
+        }
+        catch (TimeoutException ex)
+        {
+            ServiceFileHelper.Report(progress, GenerationStage.Failed, ex.Message);
+            return OperationResult<GenerationSummary>.Failure(ErrorCodes.IO_ERROR, ex.Message, ex.ToString());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ZipException)
         {

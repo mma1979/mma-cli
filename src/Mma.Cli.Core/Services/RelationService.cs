@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Mma.Cli.Core.Contracts;
 using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Events;
+using Mma.Cli.Core.Manifest;
 using Mma.Cli.Core.Results;
 using Mma.Cli.Core.Solutions;
 
@@ -12,15 +13,21 @@ public sealed class RelationService : IRelationService
 {
     private readonly ISolutionLocator _solutionLocator;
     private readonly ILogger<RelationService>? _logger;
+    private readonly ISolutionLockManager _lockManager;
+    private readonly IManifestStore _manifestStore;
 
     public RelationService(
         ISolutionLocator solutionLocator,
-        ILogger<RelationService>? logger = null)
+        ILogger<RelationService>? logger = null,
+        ISolutionLockManager? lockManager = null,
+        IManifestStore? manifestStore = null)
     {
         ArgumentNullException.ThrowIfNull(solutionLocator);
 
         _solutionLocator = solutionLocator;
         _logger = logger;
+        _lockManager = lockManager ?? new SolutionLockManager();
+        _manifestStore = manifestStore ?? new ManifestStore(_lockManager, solutionLocator);
     }
 
     public async Task<OperationResult<GenerationSummary>> ApplyAsync(
@@ -111,8 +118,14 @@ public sealed class RelationService : IRelationService
             $"builder.HasMany(e => e.{childrenSetName}).WithOne(e => e.{parentEntity}).HasForeignKey(e => e.{foreignKey})";
         var parentConfigLine = $"{parentConfigPrefix}.OnDelete(DeleteBehavior.Cascade);";
 
+        IAsyncDisposable? lockHandle = null;
         try
         {
+            if (!request.DryRun)
+            {
+                lockHandle = await _lockManager.AcquireAsync(info.SolutionPath, ct: ct).ConfigureAwait(false);
+            }
+
             var parentModifyLines = await ServiceFileHelper.ReadLinesAsync(parentModifyModelPath, ct).ConfigureAwait(false);
             var childModifyLines = await ServiceFileHelper.ReadLinesAsync(childModifyModelPath, ct).ConfigureAwait(false);
             var childReadLines = await ServiceFileHelper.ReadLinesAsync(childReadModelPath, ct).ConfigureAwait(false);
@@ -234,6 +247,82 @@ public sealed class RelationService : IRelationService
                     await ServiceFileHelper.WriteLinesAsync(path, lines, ct).ConfigureAwait(false);
                     ServiceFileHelper.Report(progress, GenerationStage.Updating, $"Updated {Path.GetFileName(path)}", path);
                 }
+
+                var (manifest, expectedHash, loadError) = await ServiceFileHelper.LoadOrCreateManifestAsync(
+                    _manifestStore, info, overrideMapper: null, ct).ConfigureAwait(false);
+                if (loadError is not null || manifest is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        loadError ?? new GenerationError(ErrorCodes.MANIFEST_INVALID, "Failed to load manifest."));
+                }
+
+                var entities = manifest.Entities.Select(e => e with { Properties = [.. e.Properties] }).ToList();
+                var relations = manifest.Relations.ToList();
+
+                _ = ServiceFileHelper.GetOrAddEntity(entities, parentEntity);
+                var childEntry = ServiceFileHelper.GetOrAddEntity(entities, childEntity);
+
+                if (request.Remove)
+                {
+                    relations.RemoveAll(r =>
+                        string.Equals(r.ParentEntity, parentEntity, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(r.ChildEntity, childEntity, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(r.ForeignKey, foreignKey, StringComparison.OrdinalIgnoreCase));
+
+                    childEntry.Properties.RemoveAll(p =>
+                        string.Equals(p.Name, foreignKey, StringComparison.OrdinalIgnoreCase));
+                }
+                else
+                {
+                    var relationName = $"{parentEntity}_{childEntity}_{foreignKey}";
+                    var relIdx = relations.FindIndex(r =>
+                        string.Equals(r.ParentEntity, parentEntity, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(r.ChildEntity, childEntity, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(r.ForeignKey, foreignKey, StringComparison.OrdinalIgnoreCase));
+
+                    var relationModel = new ManifestRelation(
+                        relationName,
+                        parentEntity,
+                        childEntity,
+                        foreignKey,
+                        normalizedFkType,
+                        "1:N",
+                        "Cascade",
+                        Applied: true);
+
+                    if (relIdx >= 0)
+                    {
+                        relations[relIdx] = relationModel;
+                    }
+                    else
+                    {
+                        relations.Add(relationModel);
+                    }
+
+                    ServiceFileHelper.UpsertProperty(
+                        childEntry.Properties,
+                        new ManifestProperty(
+                            foreignKey,
+                            normalizedFkType,
+                            Nullable: true,
+                            IsForeignKey: true,
+                            Applied: true));
+                }
+
+                var updatedManifest = manifest with
+                {
+                    Entities = entities,
+                    Relations = relations,
+                    UpdatedAtUtc = DateTimeOffset.UtcNow
+                };
+
+                var saveResult = await ServiceFileHelper.SaveManifestUnderLockAsync(
+                    _manifestStore, info.SolutionPath, updatedManifest, expectedHash, ct).ConfigureAwait(false);
+                if (!saveResult.IsSuccess)
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        saveResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to synchronize manifest."));
+                }
             }
 
             ServiceFileHelper.Report(
@@ -253,6 +342,12 @@ public sealed class RelationService : IRelationService
             ServiceFileHelper.Report(progress, GenerationStage.Failed, "Relation operation was cancelled.");
             return OperationResult<GenerationSummary>.Failure(ErrorCodes.CANCELLED, "Relation operation was cancelled.");
         }
+        catch (TimeoutException ex)
+        {
+            _logger?.LogError(ex, "Lock timeout updating relation '{ParentEntity} -> {ChildEntity}'.", parentEntity, childEntity);
+            ServiceFileHelper.Report(progress, GenerationStage.Failed, ex.Message);
+            return OperationResult<GenerationSummary>.Failure(ErrorCodes.IO_ERROR, ex.Message, ex.ToString());
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _logger?.LogError(ex, "Failed to update relation '{ParentEntity} -> {ChildEntity}'.", parentEntity, childEntity);
@@ -261,6 +356,13 @@ public sealed class RelationService : IRelationService
                 ErrorCodes.IO_ERROR,
                 $"Failed to update relation '{parentEntity} -> {childEntity}': {ex.Message}",
                 ex.ToString());
+        }
+        finally
+        {
+            if (lockHandle is not null)
+            {
+                await lockHandle.DisposeAsync().ConfigureAwait(false);
+            }
         }
     }
 

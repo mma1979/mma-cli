@@ -1,12 +1,88 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Events;
+using Mma.Cli.Core.Manifest;
+using Mma.Cli.Core.Results;
+using Mma.Cli.Core.Solutions;
 
 namespace Mma.Cli.Core.Services;
 
 internal static class ServiceFileHelper
 {
     public static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+
+    public static async Task<(ProjectManifest? Manifest, string? ExpectedHash, GenerationError? Error)> LoadOrCreateManifestAsync(
+        IManifestStore manifestStore,
+        SolutionInfo info,
+        MapperKind? overrideMapper,
+        CancellationToken ct)
+    {
+        var manifestPath = Path.Combine(info.SolutionPath, ".mma", "project.mma");
+        if (!File.Exists(manifestPath))
+        {
+            var minimal = new ProjectManifest
+            {
+                SchemaVersion = 2,
+                SolutionName = info.SolutionName,
+                Mapper = (overrideMapper ?? info.DetectedMapper).ToFolderName(),
+                SolutionFormat = info.SolutionFormat,
+                Entities = [],
+                Relations = [],
+                UpdatedAtUtc = DateTimeOffset.UtcNow
+            };
+            return (minimal, null, null);
+        }
+
+        var loaded = await manifestStore.LoadAsync(info.SolutionPath, ct).ConfigureAwait(false);
+        if (!loaded.IsSuccess || loaded.Value is null)
+        {
+            return (null, null, loaded.Error ?? new GenerationError(ErrorCodes.MANIFEST_INVALID, "Failed to load manifest."));
+        }
+
+        return (loaded.Value.Manifest, loaded.Value.ContentHash, null);
+    }
+
+    public static Task<OperationResult<ManifestDocument>> SaveManifestUnderLockAsync(
+        IManifestStore manifestStore,
+        string solutionPath,
+        ProjectManifest manifest,
+        string? expectedHash,
+        CancellationToken ct) =>
+        manifestStore is ManifestStore concreteStore
+            ? concreteStore.SaveWithHeldLockAsync(solutionPath, manifest, expectedHash, ct)
+            : manifestStore.SaveAtomicAsync(solutionPath, manifest, expectedHash, ct);
+
+    public static ManifestEntity GetOrAddEntity(
+        List<ManifestEntity> entities,
+        string entityName,
+        string pkType = "Guid",
+        bool hasApi = true,
+        bool applied = true)
+    {
+        var idx = entities.FindIndex(e => string.Equals(e.Name, entityName, StringComparison.OrdinalIgnoreCase));
+        if (idx >= 0)
+        {
+            return entities[idx];
+        }
+
+        var created = new ManifestEntity(entityName, pkType, HasService: true, HasApi: hasApi, Applied: applied, Properties: []);
+        entities.Add(created);
+        return created;
+    }
+
+    public static void UpsertProperty(List<ManifestProperty> properties, ManifestProperty property)
+    {
+        var idx = properties.FindIndex(p => string.Equals(p.Name, property.Name, StringComparison.OrdinalIgnoreCase));
+        if (idx >= 0)
+        {
+            properties[idx] = property;
+        }
+        else
+        {
+            properties.Add(property);
+        }
+    }
 
     public static void Report(
         IProgress<GenerationEvent>? progress,

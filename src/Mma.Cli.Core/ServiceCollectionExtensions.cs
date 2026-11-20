@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Mma.Cli.Core.Config;
 using Mma.Cli.Core.Contracts;
 using Mma.Cli.Core.Export;
+using Mma.Cli.Core.Manifest;
 using Mma.Cli.Core.Process;
 using Mma.Cli.Core.Services;
 using Mma.Cli.Core.Solutions;
@@ -24,6 +25,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IConfigStore, JsonConfigStore>();
         services.AddSingleton<ITemplateProvider, EmbeddedTemplateProvider>();
         services.AddSingleton<IDotnetRunner, DotnetRunner>();
+        services.AddSingleton<ISolutionLockManager, SolutionLockManager>();
+        services.AddSingleton<IManifestStore, ManifestStore>();
+        services.AddTransient<IProjectValidator, ProjectValidator>();
         services.AddTransient<ISolutionExporter, SolutionExporter>();
         services.AddTransient<ISolutionService, SolutionService>();
         services.AddTransient<IEntityService, EntityService>();

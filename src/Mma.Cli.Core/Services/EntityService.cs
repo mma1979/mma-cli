@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Mma.Cli.Core.Contracts;
 using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Events;
+using Mma.Cli.Core.Manifest;
 using Mma.Cli.Core.Results;
 using Mma.Cli.Core.Solutions;
 using Mma.Cli.Core.Templates;
@@ -13,11 +14,15 @@ public sealed class EntityService : IEntityService
     private readonly ISolutionLocator _solutionLocator;
     private readonly ITemplateProvider _templateProvider;
     private readonly ILogger<EntityService>? _logger;
+    private readonly ISolutionLockManager _lockManager;
+    private readonly IManifestStore _manifestStore;
 
     public EntityService(
         ISolutionLocator solutionLocator,
         ITemplateProvider templateProvider,
-        ILogger<EntityService>? logger = null)
+        ILogger<EntityService>? logger = null,
+        ISolutionLockManager? lockManager = null,
+        IManifestStore? manifestStore = null)
     {
         ArgumentNullException.ThrowIfNull(solutionLocator);
         ArgumentNullException.ThrowIfNull(templateProvider);
@@ -25,6 +30,8 @@ public sealed class EntityService : IEntityService
         _solutionLocator = solutionLocator;
         _templateProvider = templateProvider;
         _logger = logger;
+        _lockManager = lockManager ?? new SolutionLockManager();
+        _manifestStore = manifestStore ?? new ManifestStore(_lockManager, solutionLocator);
     }
 
     public async Task<OperationResult<GenerationSummary>> GenerateAsync(
@@ -80,29 +87,35 @@ public sealed class EntityService : IEntityService
         var dbContextPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.EntityFramework", "ApplicationDbContext.cs");
         var mappingProfilePath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "MappingProfile.cs");
 
-        if (File.Exists(entityPath))
-        {
-            return OperationResult<GenerationSummary>.Failure(
-                ErrorCodes.ENTITY_EXISTS,
-                $"Entity '{entityName}' already exists at '{entityPath}'.");
-        }
-
-        if (!File.Exists(dbContextPath))
-        {
-            return OperationResult<GenerationSummary>.Failure(
-                ErrorCodes.IO_ERROR,
-                $"ApplicationDbContext not found at '{dbContextPath}'.");
-        }
-
-        if (mapper == MapperKind.AutoMapper && !File.Exists(mappingProfilePath))
-        {
-            return OperationResult<GenerationSummary>.Failure(
-                ErrorCodes.IO_ERROR,
-                $"MappingProfile not found at '{mappingProfilePath}'.");
-        }
-
+        IAsyncDisposable? lockHandle = null;
         try
         {
+            if (!request.DryRun)
+            {
+                lockHandle = await _lockManager.AcquireAsync(info.SolutionPath, ct: ct).ConfigureAwait(false);
+            }
+
+            if (File.Exists(entityPath))
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    ErrorCodes.ENTITY_EXISTS,
+                    $"Entity '{entityName}' already exists at '{entityPath}'.");
+            }
+
+            if (!File.Exists(dbContextPath))
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    ErrorCodes.IO_ERROR,
+                    $"ApplicationDbContext not found at '{dbContextPath}'.");
+            }
+
+            if (mapper == MapperKind.AutoMapper && !File.Exists(mappingProfilePath))
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    ErrorCodes.IO_ERROR,
+                    $"MappingProfile not found at '{mappingProfilePath}'.");
+            }
+
             ServiceFileHelper.Report(progress, GenerationStage.Scaffolding, $"Preparing files for entity '{entityName}'.");
 
             var createdEntries = new List<(string Path, string Content)>
@@ -184,6 +197,45 @@ public sealed class EntityService : IEntityService
                     await ServiceFileHelper.WriteLinesAsync(path, lines, ct).ConfigureAwait(false);
                     ServiceFileHelper.Report(progress, GenerationStage.Updating, $"Updated {Path.GetFileName(path)}", path);
                 }
+
+                var (manifest, expectedHash, loadError) = await ServiceFileHelper.LoadOrCreateManifestAsync(
+                    _manifestStore, info, request.Mapper, ct).ConfigureAwait(false);
+                if (loadError is not null || manifest is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        loadError ?? new GenerationError(ErrorCodes.MANIFEST_INVALID, "Failed to load manifest."));
+                }
+
+                var entities = manifest.Entities.Select(e => e with { Properties = [.. e.Properties] }).ToList();
+                var existingIdx = entities.FindIndex(e => string.Equals(e.Name, entityName, StringComparison.OrdinalIgnoreCase));
+                if (existingIdx >= 0)
+                {
+                    entities[existingIdx] = entities[existingIdx] with
+                    {
+                        PkType = normalizedPk,
+                        HasService = true,
+                        HasApi = request.GenerateApi,
+                        Applied = true
+                    };
+                }
+                else
+                {
+                    entities.Add(new ManifestEntity(entityName, normalizedPk, true, request.GenerateApi, Applied: true, []));
+                }
+
+                var updatedManifest = manifest with
+                {
+                    Entities = entities,
+                    UpdatedAtUtc = DateTimeOffset.UtcNow
+                };
+
+                var saveResult = await ServiceFileHelper.SaveManifestUnderLockAsync(
+                    _manifestStore, info.SolutionPath, updatedManifest, expectedHash, ct).ConfigureAwait(false);
+                if (!saveResult.IsSuccess)
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        saveResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to synchronize manifest."));
+                }
             }
 
             ServiceFileHelper.Report(
@@ -203,6 +255,12 @@ public sealed class EntityService : IEntityService
             ServiceFileHelper.Report(progress, GenerationStage.Failed, "Entity generation was cancelled.");
             return OperationResult<GenerationSummary>.Failure(ErrorCodes.CANCELLED, "Entity generation was cancelled.");
         }
+        catch (TimeoutException ex)
+        {
+            _logger?.LogError(ex, "Lock timeout while generating entity '{EntityName}'.", entityName);
+            ServiceFileHelper.Report(progress, GenerationStage.Failed, ex.Message);
+            return OperationResult<GenerationSummary>.Failure(ErrorCodes.IO_ERROR, ex.Message, ex.ToString());
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _logger?.LogError(ex, "Failed to generate entity '{EntityName}'.", entityName);
@@ -211,6 +269,13 @@ public sealed class EntityService : IEntityService
                 ErrorCodes.IO_ERROR,
                 $"Failed to generate entity '{entityName}': {ex.Message}",
                 ex.ToString());
+        }
+        finally
+        {
+            if (lockHandle is not null)
+            {
+                await lockHandle.DisposeAsync().ConfigureAwait(false);
+            }
         }
     }
 
