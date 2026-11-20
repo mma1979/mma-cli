@@ -33,6 +33,17 @@ namespace Mma.Cli.Shared.Builders
             return factory;
         }
 
+        public static RestClientOptions CreateRestClientOptions(string baseUrl, bool allowInsecureLocalhostTls)
+        {
+            var options = new RestClientOptions(baseUrl);
+            if (allowInsecureLocalhostTls && Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) && uri.IsLoopback)
+            {
+                options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+            }
+
+            return options;
+        }
+
         public ImportFactory Import()
         {
             var mmaProjectPah = Path.Combine(SolutionPath, ".mma", "project.mma");
@@ -45,12 +56,7 @@ namespace Mma.Cli.Shared.Builders
                 "true",
                 StringComparison.OrdinalIgnoreCase);
 
-            using var client = allowInsecureLocalhostTls && Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) && uri.IsLoopback
-                ? new RestClient(new RestClientOptions(baseUrl)
-                {
-                    RemoteCertificateValidationCallback = (_, _, _, _) => true
-                })
-                : new RestClient(baseUrl);
+            using var client = new RestClient(CreateRestClientOptions(baseUrl, allowInsecureLocalhostTls));
             var request = new RestRequest("api/projects/import", Method.Post);
             request.RequestFormat = DataFormat.Json;
             request.AddJsonBody(body, ContentType.Json);

@@ -20,6 +20,7 @@ public class Program
         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unknown";
 
     private static readonly CancellationTokenSource _shutdownCts = new();
+    private static volatile bool _allowCooperativeCancel;
 
     static async Task Main(string[] args)
     {
@@ -49,8 +50,20 @@ public class Program
 
     private static void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
     {
+        if (!_allowCooperativeCancel || _shutdownCts.IsCancellationRequested)
+        {
+            return;
+        }
+
         e.Cancel = true;
-        _shutdownCts.Cancel();
+
+        try
+        {
+            _shutdownCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     private static async Task<int> HandleCommandLineAsync(string[] args)
@@ -158,6 +171,7 @@ public class Program
 
     private static async Task<int> HandleUICommand()
     {
+        _allowCooperativeCancel = true;
         try
         {
             var executablePath = BuildHelper.GetExecutablePath();
@@ -182,6 +196,10 @@ public class Program
         {
             Output.Error($"UI execution failed: {ex.Message}");
             return -1;
+        }
+        finally
+        {
+            _allowCooperativeCancel = false;
         }
     }
 
@@ -348,53 +366,61 @@ public class Program
 
     private static int HandleWatch()
     {
-        var solutionPath = Directory.GetCurrentDirectory();
-        var (solutionName, projectsPath) = BuildHelper.CheckSolutionPath(solutionPath);
-
-        var mmaPath = Path.Combine(solutionPath, ".mma");
-        if (!Directory.Exists(mmaPath))
+        _allowCooperativeCancel = true;
+        try
         {
-            Output.Error("Error: .mma folder not found. Are you in the solution root?");
-            return -1;
+            var solutionPath = Directory.GetCurrentDirectory();
+            var (solutionName, projectsPath) = BuildHelper.CheckSolutionPath(solutionPath);
+
+            var mmaPath = Path.Combine(solutionPath, ".mma");
+            if (!Directory.Exists(mmaPath))
+            {
+                Output.Error("Error: .mma folder not found. Are you in the solution root?");
+                return -1;
+            }
+
+            Output.Success($"Watching for changes in {solutionName}...");
+            Output.Warning("Press Q or Ctrl+C to stop watching.");
+
+            using var watcher = new FileSystemWatcher(mmaPath, "project.mma");
+            watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName;
+
+            DateTime lastRead = DateTime.MinValue;
+            watcher.Changed += (s, e) =>
+            {
+                // Simple debounce: 1 second
+                if (DateTime.Now - lastRead < TimeSpan.FromSeconds(1)) return;
+                lastRead = DateTime.Now;
+
+                Output.Warning("\nChange detected, re-importing...");
+                try
+                {
+                    ImportFactory.New(new[] { "import", solutionPath }).Import();
+                }
+                catch (Exception ex)
+                {
+                    Output.Error($"Re-import failed: {ex.Message}");
+                }
+            };
+
+            watcher.EnableRaisingEvents = true;
+
+            while (!_shutdownCts.IsCancellationRequested)
+            {
+                if (Console.KeyAvailable)
+                {
+                    var key = Console.ReadKey(true).Key;
+                    if (key == ConsoleKey.Q) break;
+                }
+                _shutdownCts.Token.WaitHandle.WaitOne(500);
+            }
+
+            return 0;
         }
-
-        Output.Success($"Watching for changes in {solutionName}...");
-        Output.Warning("Press Q or Ctrl+C to stop watching.");
-
-        using var watcher = new FileSystemWatcher(mmaPath, "project.mma");
-        watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName;
-
-        DateTime lastRead = DateTime.MinValue;
-        watcher.Changed += (s, e) =>
+        finally
         {
-            // Simple debounce: 1 second
-            if (DateTime.Now - lastRead < TimeSpan.FromSeconds(1)) return;
-            lastRead = DateTime.Now;
-
-            Output.Warning("\nChange detected, re-importing...");
-            try
-            {
-                ImportFactory.New(new[] { "import", solutionPath }).Import();
-            }
-            catch (Exception ex)
-            {
-                Output.Error($"Re-import failed: {ex.Message}");
-            }
-        };
-
-        watcher.EnableRaisingEvents = true;
-
-        while (!_shutdownCts.IsCancellationRequested)
-        {
-            if (Console.KeyAvailable)
-            {
-                var key = Console.ReadKey(true).Key;
-                if (key == ConsoleKey.Q) break;
-            }
-            _shutdownCts.Token.WaitHandle.WaitOne(500);
+            _allowCooperativeCancel = false;
         }
-
-        return 0;
     }
 
     // Helper methods for building command arguments

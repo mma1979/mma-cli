@@ -472,4 +472,82 @@ public class LegacyBuilderCharacterizationTests
         }
 #pragma warning restore SYSLIB0014
     }
+
+    [Theory]
+    [InlineData("https://localhost:44357", false, false)]
+    [InlineData("https://example.com", true, false)]
+    [InlineData("https://localhost:44357", true, true)]
+    [InlineData("https://127.0.0.1:44357", true, true)]
+    public void ImportFactory_CreateRestClientOptions_GatesInsecureTlsToLoopbackOnly(
+        string baseUrl,
+        bool allowInsecureLocalhostTls,
+        bool expectsCallback)
+    {
+        var options = ImportFactory.CreateRestClientOptions(baseUrl, allowInsecureLocalhostTls);
+
+        if (expectsCallback)
+        {
+            Assert.NotNull(options.RemoteCertificateValidationCallback);
+        }
+        else
+        {
+            Assert.Null(options.RemoteCertificateValidationCallback);
+        }
+    }
+
+    [Fact]
+    public void PropertiesBuilder_RemoveIntProperty_PreservesEntityConfigHeader()
+    {
+        var originalCwd = Directory.GetCurrentDirectory();
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            var solution = ScaffoldSolution(tempRoot, "SampleAutoApi", Mappers.AutoMapper);
+            ScaffoldEntity("Order", "Guid");
+
+            var configPath = Path.Combine(solution.ProjectsPath, "SampleAutoApi.EntityFramework", "EntityConfigurations", "OrderConfig.cs");
+            var configBefore = File.ReadAllText(configPath);
+
+            PropertiesBuilder.New(new[] { "g", "p", "Order", "Quantity", "int", "false" }, Mappers.AutoMapper)
+                .UpdateEntityModels()
+                .UpdateEntity()
+                .UpdateEntityConfig();
+
+            PropertiesBuilder.New(new[] { "g", "p", "Order", "Quantity", "int", "false", "--remove" }, Mappers.AutoMapper)
+                .UpdateEntityModels()
+                .UpdateEntity()
+                .UpdateEntityConfig();
+
+            var lines = File.ReadAllLines(configPath);
+            Assert.StartsWith("using Microsoft.EntityFrameworkCore;", lines[0]);
+            Assert.Equal(configBefore, File.ReadAllText(configPath));
+        }
+        finally
+        {
+            RestoreAndDelete(originalCwd, tempRoot);
+        }
+    }
+
+    [Fact]
+    public void Builders_OptionalTypeArgOmittedBeforeFlags_DefaultToGuid()
+    {
+        var originalCwd = Directory.GetCurrentDirectory();
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(tempRoot, "Dummy.sln"), string.Empty);
+            Directory.SetCurrentDirectory(tempRoot);
+
+            var entityBuilder = EntityBuilder.New(new[] { "g", "e", "FlaggedEntity", "--no-api" });
+            Assert.Equal(PkTypes.GUID, entityBuilder.PkType);
+
+            var relationsBuilder = RelationsBuilder.New(new[] { "g", "r", "Order", "OrderItem", "OrderId", "--remove" });
+            Assert.Equal(PkTypes.GUID, relationsBuilder.ForeignDataType);
+            Assert.True(relationsBuilder.RemoveFlag);
+        }
+        finally
+        {
+            RestoreAndDelete(originalCwd, tempRoot);
+        }
+    }
 }

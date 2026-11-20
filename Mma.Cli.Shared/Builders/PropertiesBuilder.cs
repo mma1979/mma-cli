@@ -299,24 +299,30 @@ namespace Mma.Cli.Shared.Builders
 
         public PropertiesBuilder UpdateEntityConfig()
         {
+            var config = DataType switch
+            {
+                PkTypes.STRING => $"builder.Property(e => e.{PropertyName}).HasMaxLength(255);",
+                PkTypes.DECIMAL => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"decimal(9,3)\");",
+                PkTypes.DATE_TIME => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"datetime\");",
+                PkTypes.GUID => $"builder.Property(e => e.{PropertyName}).HasDefaultValue(\"newid()\");",
+                PkTypes.BYTE_ARRAY => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"varbinary(max)\");",
+                PkTypes.TIME_SPAN => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"time\");",
+                _ => ""
+            };
+
+            if (string.IsNullOrEmpty(config))
+            {
+                return this;
+            }
 
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.EntityFramework", "EntityConfigurations", $"{EntityName}Config.cs");
 
             void UpdateConfig()
             {
+                if (string.IsNullOrEmpty(config)) return;
+
                 var lines = File.ReadAllLines(path).ToList();
                 var index = lines.FindIndex(l => l.Contains("builder.HasIndex(e => e.IsDeleted);")) + 2;
-
-                var config = DataType switch
-                {
-                    PkTypes.STRING => $"builder.Property(e => e.{PropertyName}).HasMaxLength(255);",
-                    PkTypes.DECIMAL => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"decimal(9,3)\");",
-                    PkTypes.DATE_TIME => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"datetime\");",
-                    PkTypes.GUID => $"builder.Property(e => e.{PropertyName}).HasDefaultValue(\"newid()\");",
-                    PkTypes.BYTE_ARRAY => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"varbinary(max)\");",
-                    PkTypes.TIME_SPAN => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"time\");",
-                    _ => ""
-                };
 
                 if (index > 1)
                 {
@@ -332,19 +338,9 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveConfig()
             {
+                if (string.IsNullOrEmpty(config)) return;
+
                 var lines = File.ReadAllLines(path).ToList();
-
-                var config = DataType switch
-                {
-                    PkTypes.STRING => $"builder.Property(e => e.{PropertyName}).HasMaxLength(255);",
-                    PkTypes.DECIMAL => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"decimal(9,3)\");",
-                    PkTypes.DATE_TIME => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"datetime\");",
-                    PkTypes.GUID => $"builder.Property(e => e.{PropertyName}).HasDefaultValue(\"newid()\");",
-                    PkTypes.BYTE_ARRAY => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"varbinary(max)\");",
-                    PkTypes.TIME_SPAN => $"builder.Property(e => e.{PropertyName}).HasColumnType(\"time\");",
-                    _ => ""
-                };
-
                 var index = lines.FindIndex(l => l.Contains(config));
 
                 if (index != -1)
