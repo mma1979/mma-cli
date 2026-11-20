@@ -48,13 +48,14 @@ public sealed class SqliteWorkspaceRegistry : IWorkspaceRegistry
         ArgumentException.ThrowIfNullOrWhiteSpace(mapper);
 
         var canonicalPath = CanonicalizePath(solutionPath);
-        var now = DateTimeOffset.UtcNow;
+        var now = DateTimeOffset.UtcNow.ToUniversalTime();
 
         var existing = await FindTrackedByPathAsync(canonicalPath, ct).ConfigureAwait(false);
         if (existing is not null)
         {
             existing.Name = name;
             existing.Mapper = mapper;
+            existing.CreatedAtUtc = existing.CreatedAtUtc.ToUniversalTime();
             existing.LastOpenedAtUtc = now;
             await _db.SaveChangesAsync(ct).ConfigureAwait(false);
             return existing;
@@ -70,8 +71,27 @@ public sealed class SqliteWorkspaceRegistry : IWorkspaceRegistry
         };
 
         _db.Workspaces.Add(record);
-        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return record;
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return record;
+        }
+        catch (DbUpdateException)
+        {
+            _db.ChangeTracker.Clear();
+            var conflicted = await FindTrackedByPathAsync(canonicalPath, ct).ConfigureAwait(false);
+            if (conflicted is null)
+            {
+                throw;
+            }
+
+            conflicted.Name = name;
+            conflicted.Mapper = mapper;
+            conflicted.CreatedAtUtc = conflicted.CreatedAtUtc.ToUniversalTime();
+            conflicted.LastOpenedAtUtc = DateTimeOffset.UtcNow.ToUniversalTime();
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return conflicted;
+        }
     }
 
     public async Task<IReadOnlyList<WorkspaceRecord>> ListAsync(CancellationToken ct = default)
@@ -148,7 +168,8 @@ public sealed class SqliteWorkspaceRegistry : IWorkspaceRegistry
             workspace.Mapper = manifest.Mapper;
         }
 
-        workspace.LastOpenedAtUtc = DateTimeOffset.UtcNow;
+        workspace.CreatedAtUtc = workspace.CreatedAtUtc.ToUniversalTime();
+        workspace.LastOpenedAtUtc = DateTimeOffset.UtcNow.ToUniversalTime();
 
         var incomingByName = new Dictionary<string, ManifestEntity>(StringComparer.OrdinalIgnoreCase);
         foreach (var entity in manifest.Entities)

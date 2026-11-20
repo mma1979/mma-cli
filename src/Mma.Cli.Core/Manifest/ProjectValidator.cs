@@ -52,6 +52,7 @@ public sealed class ProjectValidator : IProjectValidator
         var manifest = loaded.Value.Manifest;
         var issues = new List<ValidationIssue>();
 
+        ValidateSolutionMetadata(info, manifest, issues);
         ValidateEntities(info, manifest.Entities, issues);
         ValidateRelations(manifest.Entities, manifest.Relations, issues);
 
@@ -62,6 +63,33 @@ public sealed class ProjectValidator : IProjectValidator
 
         return OperationResult<ProjectValidationReport>.Success(
             new ProjectValidationReport(isValid, reportSolutionName, issues));
+    }
+
+    private static void ValidateSolutionMetadata(
+        SolutionInfo info,
+        ProjectManifest manifest,
+        List<ValidationIssue> issues)
+    {
+        if (!string.IsNullOrWhiteSpace(manifest.SolutionName)
+            && !string.Equals(manifest.SolutionName, info.SolutionName, StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new ValidationIssue(
+                SeverityWarning,
+                "SOLUTION_NAME_MISMATCH",
+                $"Manifest solution name '{manifest.SolutionName}' does not match solution file '{info.SolutionName}'.",
+                manifest.SolutionName));
+        }
+
+        if (!string.IsNullOrWhiteSpace(manifest.Mapper)
+            && (!MapperKindParser.TryParse(manifest.Mapper, out var manifestMapper)
+                || manifestMapper != info.DetectedMapper))
+        {
+            issues.Add(new ValidationIssue(
+                SeverityWarning,
+                "MAPPER_MISMATCH",
+                $"Manifest mapper '{manifest.Mapper}' does not match detected solution mapper '{info.DetectedMapper.ToFolderName()}'.",
+                manifest.Mapper));
+        }
     }
 
     private static void ValidateEntities(
@@ -179,9 +207,18 @@ public sealed class ProjectValidator : IProjectValidator
         var knownEntities = new HashSet<string>(
             entities.Select(e => e.Name),
             StringComparer.OrdinalIgnoreCase);
+        var seenRelationNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var relation in relations)
         {
+            if (!string.IsNullOrWhiteSpace(relation.Name) && !seenRelationNames.Add(relation.Name))
+            {
+                issues.Add(new ValidationIssue(
+                    SeverityError,
+                    "DUPLICATE_RELATION",
+                    $"Duplicate relation '{relation.Name}' in manifest.",
+                    relation.Name));
+            }
             if (string.IsNullOrWhiteSpace(relation.ParentEntity) || !knownEntities.Contains(relation.ParentEntity))
             {
                 issues.Add(new ValidationIssue(

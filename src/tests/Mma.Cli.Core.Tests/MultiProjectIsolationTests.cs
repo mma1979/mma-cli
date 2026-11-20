@@ -167,4 +167,39 @@ public sealed class MultiProjectIsolationTests : IDisposable
         db.Entities.Add(new Database.Entities.WorkspaceEntityRecord { WorkspaceId = ws.Id, EntityName = "Dup", PkType = "long" });
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
+
+    [Fact]
+    public async Task SqliteWorkspaceRegistry_StoresUtcTimestampsAndHandlesConcurrentRegister()
+    {
+        var dbPath = Path.Combine(_tempRoot, "concurrent.db");
+        var services = new ServiceCollection();
+        services.AddMmaDatabase(dbPath);
+        await using var provider = services.BuildServiceProvider();
+
+        await using (var initScope = provider.CreateAsyncScope())
+        {
+            await initScope.ServiceProvider.GetRequiredService<IWorkspaceRegistry>().EnsureInitializedAsync();
+        }
+
+        var slnPath = Path.Combine(_tempRoot, "SharedApp");
+        using var barrier = new Barrier(4);
+        var tasks = Enumerable.Range(0, 4).Select(i => Task.Run(async () =>
+        {
+            await using var scope = provider.CreateAsyncScope();
+            var registry = scope.ServiceProvider.GetRequiredService<IWorkspaceRegistry>();
+            barrier.SignalAndWait();
+            return await registry.RegisterAsync($"SharedApp_{i}", slnPath, "AutoMapper");
+        })).ToArray();
+
+        var records = await Task.WhenAll(tasks);
+        Assert.All(records, r =>
+        {
+            Assert.Equal(TimeSpan.Zero, r.CreatedAtUtc.Offset);
+            Assert.Equal(TimeSpan.Zero, r.LastOpenedAtUtc.Offset);
+        });
+
+        await using var verifyScope = provider.CreateAsyncScope();
+        var list = await verifyScope.ServiceProvider.GetRequiredService<IWorkspaceRegistry>().ListAsync();
+        Assert.Single(list);
+    }
 }

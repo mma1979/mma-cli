@@ -154,4 +154,67 @@ public sealed class ProjectValidatorTests : IDisposable
         Assert.True(result.Value.Issues.Count >= 6);
         Assert.All(result.Value.Issues.Where(i => i.Code != "UNAPPLIED_ENTITY"), i => Assert.Equal("Error", i.Severity));
     }
+
+    [Fact]
+    public async Task ValidateAsync_DuplicateRelationName_ReportsDuplicateRelationError()
+    {
+        var slnDir = Path.Combine(_tempRoot, "DupRelApp");
+        Directory.CreateDirectory(slnDir);
+        await File.WriteAllTextAsync(Path.Combine(slnDir, "DupRelApp.sln"), string.Empty);
+
+        var store = new ManifestStore();
+        await store.SaveAtomicAsync(slnDir, new ProjectManifest
+        {
+            SchemaVersion = 2,
+            SolutionName = "DupRelApp",
+            Mapper = "AutoMapper",
+            SolutionFormat = ".sln",
+            Entities =
+            [
+                new ManifestEntity("Category", "Guid", Applied: false),
+                new ManifestEntity("Product", "Guid", Applied: false)
+            ],
+            Relations =
+            [
+                new ManifestRelation("Category_Product_CategoryId", "Category", "Product", "CategoryId"),
+                new ManifestRelation("category_product_categoryid", "Category", "Product", "SecondaryCategoryId")
+            ]
+        });
+
+        var validator = new ProjectValidator(new SolutionLocator(), store);
+        var result = await validator.ValidateAsync(slnDir);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.False(result.Value.IsValid);
+        Assert.Contains(result.Value.Issues, i =>
+            i.Severity == "Error"
+            && i.Code == "DUPLICATE_RELATION");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_SolutionNameAndMapperMismatch_ReportsWarnings()
+    {
+        var slnDir = Path.Combine(_tempRoot, "MismatchApp");
+        Directory.CreateDirectory(slnDir);
+        await File.WriteAllTextAsync(Path.Combine(slnDir, "MismatchApp.sln"), string.Empty);
+
+        var store = new ManifestStore();
+        await store.SaveAtomicAsync(slnDir, new ProjectManifest
+        {
+            SchemaVersion = 2,
+            SolutionName = "RenamedApp",
+            Mapper = "UnknownMapper",
+            SolutionFormat = ".sln"
+        });
+
+        var validator = new ProjectValidator(new SolutionLocator(), store);
+        var result = await validator.ValidateAsync(slnDir);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.True(result.Value.IsValid);
+        Assert.Contains(result.Value.Issues, i => i.Severity == "Warning" && i.Code == "SOLUTION_NAME_MISMATCH");
+        Assert.Contains(result.Value.Issues, i => i.Severity == "Warning" && i.Code == "MAPPER_MISMATCH");
+    }
 }

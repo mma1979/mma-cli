@@ -241,19 +241,19 @@ public sealed class RelationService : IRelationService
 
             if (!request.DryRun)
             {
-                foreach (var (path, lines) in pendingWrites)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    await ServiceFileHelper.WriteLinesAsync(path, lines, ct).ConfigureAwait(false);
-                    ServiceFileHelper.Report(progress, GenerationStage.Updating, $"Updated {Path.GetFileName(path)}", path);
-                }
-
                 var (manifest, expectedHash, loadError) = await ServiceFileHelper.LoadOrCreateManifestAsync(
                     _manifestStore, info, overrideMapper: null, ct).ConfigureAwait(false);
                 if (loadError is not null || manifest is null)
                 {
                     return OperationResult<GenerationSummary>.Failure(
                         loadError ?? new GenerationError(ErrorCodes.MANIFEST_INVALID, "Failed to load manifest."));
+                }
+
+                foreach (var (path, lines) in pendingWrites)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    await ServiceFileHelper.WriteLinesAsync(path, lines, ct).ConfigureAwait(false);
+                    ServiceFileHelper.Report(progress, GenerationStage.Updating, $"Updated {Path.GetFileName(path)}", path);
                 }
 
                 var entities = manifest.Entities.Select(e => e with { Properties = [.. e.Properties] }).ToList();

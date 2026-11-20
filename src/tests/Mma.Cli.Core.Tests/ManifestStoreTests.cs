@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Mma.Cli.Core.Contracts;
@@ -405,5 +406,115 @@ public sealed class ManifestStoreTests : IDisposable
         Assert.NotNull(provider.GetRequiredService<ISolutionLockManager>());
         Assert.NotNull(provider.GetRequiredService<IManifestStore>());
         Assert.NotNull(provider.GetRequiredService<IProjectValidator>());
+    }
+
+    [Fact]
+    public async Task LoadAsync_WithUtf8BomLegacyV1Manifest_SucceedsAndUpgradesToV2()
+    {
+        var slnDir = Path.Combine(_tempRoot, "BomLegacyApp");
+        var mmaDir = Path.Combine(slnDir, ".mma");
+        Directory.CreateDirectory(mmaDir);
+        await File.WriteAllTextAsync(Path.Combine(slnDir, "BomLegacyApp.sln"), string.Empty);
+
+        var legacyJson = """
+        {
+          "Project": { "Name": "BomLegacyApp", "Path": "C:\\temp\\BomLegacyApp" },
+          "Entities": [
+            { "Id": 1, "EntityName": "Customer", "PkType": "Guid", "HasService": true, "HasApi": true, "Applied": true }
+          ],
+          "Rows": [
+            { "Id": 1, "EntityId": 1, "ColumnName": "Email", "DataType": "string", "Nullable": false, "Applied": true }
+          ],
+          "Relations": []
+        }
+        """;
+
+        var bom = Encoding.UTF8.GetPreamble();
+        var payload = Encoding.UTF8.GetBytes(legacyJson);
+        var bytesWithBom = new byte[bom.Length + payload.Length];
+        Buffer.BlockCopy(bom, 0, bytesWithBom, 0, bom.Length);
+        Buffer.BlockCopy(payload, 0, bytesWithBom, bom.Length, payload.Length);
+        await File.WriteAllBytesAsync(Path.Combine(mmaDir, "project.mma"), bytesWithBom);
+
+        var store = new ManifestStore();
+        var loaded = await store.LoadAsync(slnDir);
+
+        Assert.True(loaded.IsSuccess, loaded.Error?.Message);
+        Assert.NotNull(loaded.Value);
+        Assert.True(loaded.Value.UpgradedFromV1);
+        Assert.Equal("BomLegacyApp", loaded.Value.Manifest.SolutionName);
+        var entity = Assert.Single(loaded.Value.Manifest.Entities);
+        Assert.Equal("Customer", entity.Name);
+        Assert.Single(entity.Properties, p => p.Name == "Email");
+
+        var saved = await store.SaveAtomicAsync(slnDir, loaded.Value.Manifest, expectedHash: loaded.Value.ContentHash);
+        Assert.True(saved.IsSuccess, saved.Error?.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WithUtf8BomV2Manifest_Succeeds()
+    {
+        var slnDir = Path.Combine(_tempRoot, "BomV2App");
+        var mmaDir = Path.Combine(slnDir, ".mma");
+        Directory.CreateDirectory(mmaDir);
+
+        var v2Json = """{"schemaVersion":2,"solutionName":"BomV2App","mapper":"Mapster","solutionFormat":".slnx","entities":[],"relations":[]}""";
+        var bom = Encoding.UTF8.GetPreamble();
+        var payload = Encoding.UTF8.GetBytes(v2Json);
+        var bytesWithBom = new byte[bom.Length + payload.Length];
+        Buffer.BlockCopy(bom, 0, bytesWithBom, 0, bom.Length);
+        Buffer.BlockCopy(payload, 0, bytesWithBom, bom.Length, payload.Length);
+        await File.WriteAllBytesAsync(Path.Combine(mmaDir, "project.mma"), bytesWithBom);
+
+        var loaded = await new ManifestStore().LoadAsync(slnDir);
+
+        Assert.True(loaded.IsSuccess, loaded.Error?.Message);
+        Assert.False(loaded.Value!.UpgradedFromV1);
+        Assert.Equal("BomV2App", loaded.Value.Manifest.SolutionName);
+        Assert.Equal("Mapster", loaded.Value.Manifest.Mapper);
+    }
+
+    [Fact]
+    public async Task Services_WhenManifestCorrupt_FailFastWithManifestInvalidWithoutMutatingDiskFiles()
+    {
+        var slnSvc = new SolutionService();
+        Assert.True((await slnSvc.CreateAsync(new CreateSolutionRequest(_tempRoot, "FailFastApp", MapperKind.AutoMapper))).IsSuccess);
+        var slnDir = Path.Combine(_tempRoot, "FailFastApp");
+
+        var locator = new SolutionLocator();
+        var templates = new EmbeddedTemplateProvider();
+        var entitySvc = new EntityService(locator, templates);
+        var propSvc = new PropertyService(locator);
+        var relSvc = new RelationService(locator);
+
+        Assert.True((await entitySvc.GenerateAsync(new AddEntityRequest(slnDir, "Customer", "Guid"))).IsSuccess);
+        Assert.True((await entitySvc.GenerateAsync(new AddEntityRequest(slnDir, "Order", "Guid"))).IsSuccess);
+
+        var projectsPath = Path.Combine(slnDir, "FailFastApp");
+        var dbContextPath = Path.Combine(projectsPath, "FailFastApp.EntityFramework", "ApplicationDbContext.cs");
+        var customerEntityPath = Path.Combine(projectsPath, "FailFastApp.Core", "Database", "Tables", "Customer.cs");
+        var orderEntityPath = Path.Combine(projectsPath, "FailFastApp.Core", "Database", "Tables", "Order.cs");
+        var dbContextBefore = await File.ReadAllTextAsync(dbContextPath);
+        var customerBefore = await File.ReadAllTextAsync(customerEntityPath);
+        var orderBefore = await File.ReadAllTextAsync(orderEntityPath);
+
+        await File.WriteAllTextAsync(Path.Combine(slnDir, ".mma", "project.mma"), "{ corrupt json");
+
+        var entityFail = await entitySvc.GenerateAsync(new AddEntityRequest(slnDir, "Product", "Guid"));
+        Assert.False(entityFail.IsSuccess);
+        Assert.Equal(ErrorCodes.MANIFEST_INVALID, entityFail.Error?.Code);
+        Assert.False(File.Exists(Path.Combine(projectsPath, "FailFastApp.Core", "Database", "Tables", "Product.cs")));
+        Assert.Equal(dbContextBefore, await File.ReadAllTextAsync(dbContextPath));
+
+        var propFail = await propSvc.ApplyAsync(new AddPropertyRequest(slnDir, "Customer", "Email", "string"));
+        Assert.False(propFail.IsSuccess);
+        Assert.Equal(ErrorCodes.MANIFEST_INVALID, propFail.Error?.Code);
+        Assert.Equal(customerBefore, await File.ReadAllTextAsync(customerEntityPath));
+
+        var relFail = await relSvc.ApplyAsync(new AddRelationRequest(slnDir, "Customer", "Order", "CustomerId", "Guid"));
+        Assert.False(relFail.IsSuccess);
+        Assert.Equal(ErrorCodes.MANIFEST_INVALID, relFail.Error?.Code);
+        Assert.Equal(customerBefore, await File.ReadAllTextAsync(customerEntityPath));
+        Assert.Equal(orderBefore, await File.ReadAllTextAsync(orderEntityPath));
     }
 }

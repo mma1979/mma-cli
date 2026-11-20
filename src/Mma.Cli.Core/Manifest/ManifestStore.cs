@@ -95,10 +95,11 @@ public sealed class ManifestStore : IManifestStore
         }
 
         var contentHash = ComputeHash(fileBytes);
+        var jsonMemory = StripUtf8Bom(fileBytes);
 
         try
         {
-            using var doc = JsonDocument.Parse(fileBytes, DocumentReadOptions);
+            using var doc = JsonDocument.Parse(jsonMemory, DocumentReadOptions);
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
@@ -118,7 +119,7 @@ public sealed class ManifestStore : IManifestStore
 
                 if (schemaVersion == 2)
                 {
-                    var v2Manifest = JsonSerializer.Deserialize<ProjectManifest>(fileBytes, ReadOptions);
+                    var v2Manifest = JsonSerializer.Deserialize<ProjectManifest>(jsonMemory.Span, ReadOptions);
                     if (v2Manifest is null)
                     {
                         return OperationResult<ManifestDocument>.Failure(
@@ -699,6 +700,14 @@ public sealed class ManifestStore : IManifestStore
 
     private static string ComputeHash(byte[] bytes) =>
         "sha256:" + Convert.ToHexStringLower(SHA256.HashData(bytes));
+
+    private static ReadOnlyMemory<byte> StripUtf8Bom(byte[] bytes)
+    {
+        var preamble = Encoding.UTF8.Preamble;
+        return bytes.AsSpan().StartsWith(preamble)
+            ? bytes.AsMemory(preamble.Length)
+            : bytes.AsMemory();
+    }
 
     private static bool TryGetPropertyIgnoreCase(JsonElement obj, string name, out JsonElement value)
     {
