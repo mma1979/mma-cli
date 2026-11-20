@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Mma.Cli.Core.Contracts;
 using Mma.Cli.Core.Domain;
@@ -106,8 +107,9 @@ public sealed class RelationService : IRelationService
         var childEntityNav = BuildRelationProperty(true, true, parentEntity, parentEntity);
         var childEntityFk = BuildRelationProperty(true, false, normalizedFkType, foreignKey);
         var childEntityAssign = $"{foreignKey} = dto.{foreignKey};";
-        var parentConfigLine =
-            $"builder.HasMany(e => e.{childrenSetName}).WithOne(e => e.{parentEntity}).HasForeignKey(e => e.{foreignKey}).OnDelete(DeleteBehavior.Cascade);";
+        var parentConfigPrefix =
+            $"builder.HasMany(e => e.{childrenSetName}).WithOne(e => e.{parentEntity}).HasForeignKey(e => e.{foreignKey})";
+        var parentConfigLine = $"{parentConfigPrefix}.OnDelete(DeleteBehavior.Cascade);";
 
         try
         {
@@ -120,8 +122,8 @@ public sealed class RelationService : IRelationService
 
             if (request.Remove)
             {
-                var relationExists = parentConfigLines.Any(l => l.Contains(parentConfigLine, StringComparison.Ordinal))
-                                     || childEntityLines.Any(l => l.Contains(childEntityFk, StringComparison.Ordinal));
+                var relationExists = parentConfigLines.Any(l => l.Contains(parentConfigPrefix, StringComparison.Ordinal))
+                                     || ServiceFileHelper.HasPropertyNamed(childEntityLines, foreignKey);
                 if (!relationExists)
                 {
                     return OperationResult<GenerationSummary>.Failure(
@@ -129,31 +131,48 @@ public sealed class RelationService : IRelationService
                         $"Relation '{parentEntity} -> {childEntity}' via '{foreignKey}' was not found.");
                 }
 
-                ServiceFileHelper.RemoveLineContaining(parentModifyLines, parentDtoNav);
-                ServiceFileHelper.RemoveLineContaining(childModifyLines, childDtoFk);
-                ServiceFileHelper.RemoveLineContaining(childModifyLines, childDtoNav);
-                ServiceFileHelper.RemoveLineContaining(childReadLines, childDtoFk);
+                RemoveVirtualProperty(parentModifyLines, $"List<{childEntity}>", childrenSetName);
+                ServiceFileHelper.RemovePropertyNamed(childModifyLines, foreignKey);
+                RemoveVirtualProperty(childModifyLines, parentEntity, parentEntity);
+                ServiceFileHelper.RemovePropertyNamed(childReadLines, foreignKey);
 
-                ServiceFileHelper.RemoveLineContaining(parentEntityLines, parentEntityNav);
+                RemoveVirtualProperty(parentEntityLines, $"ICollection<{childEntity}>", childrenSetName);
                 ServiceFileHelper.RemoveLineContaining(parentEntityLines, parentEntityAssign);
                 ServiceFileHelper.RemoveLineContaining(parentEntityLines, parentEntityAssign);
 
-                ServiceFileHelper.RemoveLineContaining(childEntityLines, childEntityFk);
-                ServiceFileHelper.RemoveLineContaining(childEntityLines, childEntityNav);
+                ServiceFileHelper.RemovePropertyNamed(childEntityLines, foreignKey);
+                RemoveVirtualProperty(childEntityLines, parentEntity, parentEntity);
                 ServiceFileHelper.RemoveLineContaining(childEntityLines, childEntityAssign);
                 ServiceFileHelper.RemoveLineContaining(childEntityLines, childEntityAssign);
 
-                ServiceFileHelper.RemoveLineContaining(parentConfigLines, parentConfigLine);
+                ServiceFileHelper.RemoveLineContaining(parentConfigLines, parentConfigPrefix);
             }
             else
             {
-                var relationExists = parentConfigLines.Any(l => l.Contains(parentConfigLine, StringComparison.Ordinal))
-                                     || childEntityLines.Any(l => l.Contains(childEntityFk, StringComparison.Ordinal));
-                if (relationExists)
+                if (parentConfigLines.Any(l => l.Contains(parentConfigPrefix, StringComparison.Ordinal)))
                 {
                     return OperationResult<GenerationSummary>.Failure(
                         ErrorCodes.RELATION_EXISTS,
                         $"Relation '{parentEntity} -> {childEntity}' via '{foreignKey}' already exists.");
+                }
+
+                if (ServiceFileHelper.HasPropertyNamed(childEntityLines, foreignKey)
+                    || ServiceFileHelper.HasPropertyNamed(childModifyLines, foreignKey)
+                    || ServiceFileHelper.HasPropertyNamed(childReadLines, foreignKey))
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        ErrorCodes.PROPERTY_EXISTS,
+                        $"Property '{foreignKey}' already exists on entity '{childEntity}'.");
+                }
+
+                if (ServiceFileHelper.HasPropertyNamed(childEntityLines, parentEntity)
+                    || ServiceFileHelper.HasPropertyNamed(childModifyLines, parentEntity)
+                    || ServiceFileHelper.HasPropertyNamed(parentEntityLines, childrenSetName)
+                    || ServiceFileHelper.HasPropertyNamed(parentModifyLines, childrenSetName))
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        ErrorCodes.PROPERTY_EXISTS,
+                        $"Navigation property for '{parentEntity} -> {childEntity}' already exists.");
                 }
 
                 ServiceFileHelper.InsertBeforeClosingBraces(parentModifyLines, parentDtoNav);
@@ -189,14 +208,12 @@ public sealed class RelationService : IRelationService
                 ServiceFileHelper.InsertAtAnchorOffset(childEntityLines, $"public {childEntity}(", 10, childEntityAssign);
                 ServiceFileHelper.InsertAtAnchorOffset(childEntityLines, $"public {childEntity} Update(", 10, childEntityAssign);
 
-                var configIndexLine = parentConfigLines.FindIndex(l => l.Contains("builder.HasIndex(e => e.IsDeleted);", StringComparison.Ordinal));
-                if (configIndexLine < 0)
+                if (!ServiceFileHelper.TryInsertAfterEntityConfigAnchor(parentConfigLines, parentConfigLine))
                 {
                     return OperationResult<GenerationSummary>.Failure(
                         ErrorCodes.TEMPLATE_ERROR,
                         $"Could not locate configuration anchor in '{parentConfigPath}'.");
                 }
-                parentConfigLines.Insert(Math.Min(configIndexLine + 2, parentConfigLines.Count), parentConfigLine);
             }
 
             var pendingWrites = new List<(string Path, List<string> Lines)>
@@ -252,5 +269,11 @@ public sealed class RelationService : IRelationService
         var modifier = isPrivateSet ? "private " : string.Empty;
         var virtualized = isVirtual ? "virtual " : string.Empty;
         return $"public {virtualized}{type}? {name} {{get; {modifier}set;}}";
+    }
+
+    private static bool RemoveVirtualProperty(List<string> lines, string type, string name)
+    {
+        var pattern = $@"^\s*public\s+virtual\s+{Regex.Escape(type)}\??\s+{Regex.Escape(name)}\s*\{{\s*(?:get|init)\b";
+        return ServiceFileHelper.RemoveLineMatching(lines, l => Regex.IsMatch(l, pattern, RegexOptions.CultureInvariant));
     }
 }

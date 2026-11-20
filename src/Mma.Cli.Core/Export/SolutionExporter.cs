@@ -145,9 +145,17 @@ public sealed class SolutionExporter : ISolutionExporter
 
             return OperationResult.Success();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             return OperationResult.Failure(ErrorCodes.CANCELLED, "Solution export was cancelled.");
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger?.LogError(ex, "HTTP request timed out exporting solution to '{Endpoint}'.", importUri);
+            return OperationResult.Failure(
+                ErrorCodes.HTTP_ERROR,
+                $"HTTP request timed out exporting solution: {ex.Message}",
+                ex.ToString());
         }
         catch (HttpRequestException ex)
         {

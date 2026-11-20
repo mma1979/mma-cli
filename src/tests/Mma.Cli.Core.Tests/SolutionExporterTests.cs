@@ -149,6 +149,26 @@ public sealed class SolutionExporterTests : IDisposable
         Assert.Equal(ErrorCodes.CANCELLED, result.Error?.Code);
     }
 
+    [Fact]
+    public async Task ExportAsync_WhenHttpRequestTimesOut_ReturnsHttpError()
+    {
+        var slnDir = CreateSampleSolutionDir("TimeoutExport", null);
+        var timeoutHandler = new RecordingHttpMessageHandler(_ =>
+            throw new TaskCanceledException(
+                "The request was canceled due to the configured HttpClient.Timeout.",
+                new TimeoutException()));
+
+        var exporter = new SolutionExporter(
+            new SolutionLocator(),
+            new JsonConfigStore(userConfigDir: Path.Combine(_tempRoot, "empty-global")),
+            new FakeHttpClientFactory(timeoutHandler));
+
+        var result = await exporter.ExportAsync(slnDir);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.HTTP_ERROR, result.Error?.Code);
+    }
+
     private string CreateSampleSolutionDir(string name, string? configJson)
     {
         var slnDir = Path.Combine(_tempRoot, name);

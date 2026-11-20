@@ -233,6 +233,7 @@ public sealed class CoreGenerationServicesTests : IDisposable
         Assert.Contains("public string Title {get; private set;}", File.ReadAllText(entityPath));
         Assert.Contains("Title = dto.Title;", File.ReadAllText(entityPath));
         Assert.Contains("builder.Property(e => e.Title).HasMaxLength(255);", File.ReadAllText(configPath));
+        AssertDeletedDateFluentChainIntact(configPath);
 
         var duplicateProp = await propSvc.ApplyAsync(new AddPropertyRequest(autoDir, "Order", "Title", "string"));
         Assert.False(duplicateProp.IsSuccess);
@@ -308,6 +309,7 @@ public sealed class CoreGenerationServicesTests : IDisposable
         Assert.Contains("ICollection<Product>", File.ReadAllText(categoryEntityPath));
         Assert.Contains("CategoryId", File.ReadAllText(productEntityPath));
         Assert.Contains("HasMany(e => e.Products).WithOne(e => e.Category)", File.ReadAllText(categoryConfigPath));
+        AssertDeletedDateFluentChainIntact(categoryConfigPath);
         Assert.Equal(categoryReadBefore, File.ReadAllText(categoryReadPath));
 
         var remove = await relSvc.ApplyAsync(new AddRelationRequest(mapDir, "Category", "Product", "CategoryId", "Guid", Remove: true));
@@ -335,6 +337,83 @@ public sealed class CoreGenerationServicesTests : IDisposable
         var autoRemove = await relSvc.ApplyAsync(new AddRelationRequest(autoDir, "Order", "OrderItem", "OrderId", "Guid", Remove: true));
         Assert.True(autoRemove.IsSuccess);
         Assert.DoesNotContain("List<OrderItem>", File.ReadAllText(Path.Combine(autoProjects, "RelAutoApi.Core", "Models", "OrderModifyModel.cs")));
+    }
+
+    [Fact]
+    public async Task RelationService_WhenForeignKeyPropertyAlreadyExists_ReturnsPropertyExists()
+    {
+        var slnSvc = new SolutionService();
+        await slnSvc.CreateAsync(new CreateSolutionRequest(_tempRoot, "DupRelApi", MapperKind.AutoMapper));
+        var slnDir = Path.Combine(_tempRoot, "DupRelApi");
+
+        var entitySvc = new EntityService(_locator, _templates);
+        await entitySvc.GenerateAsync(new AddEntityRequest(slnDir, "Category", "Guid"));
+        await entitySvc.GenerateAsync(new AddEntityRequest(slnDir, "Product", "Guid"));
+
+        var propSvc = new PropertyService(_locator);
+        await propSvc.ApplyAsync(new AddPropertyRequest(slnDir, "Product", "CategoryId", "int"));
+
+        var relSvc = new RelationService(_locator);
+        var result = await relSvc.ApplyAsync(new AddRelationRequest(slnDir, "Category", "Product", "CategoryId", "Guid"));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.PROPERTY_EXISTS, result.Error?.Code);
+    }
+
+    [Fact]
+    public async Task RelationService_RemovesLegacyDoubleSpacedRelation_EvenWithMismatchedFkType()
+    {
+        var slnSvc = new SolutionService();
+        await slnSvc.CreateAsync(new CreateSolutionRequest(_tempRoot, "LegacyRelApi", MapperKind.AutoMapper));
+        var slnDir = Path.Combine(_tempRoot, "LegacyRelApi");
+
+        var entitySvc = new EntityService(_locator, _templates);
+        await entitySvc.GenerateAsync(new AddEntityRequest(slnDir, "Order", "Guid"));
+        await entitySvc.GenerateAsync(new AddEntityRequest(slnDir, "OrderItem", "Guid"));
+
+        var projects = Path.Combine(slnDir, "LegacyRelApi");
+        var orderModify = Path.Combine(projects, "LegacyRelApi.Core", "Models", "OrderModifyModel.cs");
+        var itemModify = Path.Combine(projects, "LegacyRelApi.Core", "Models", "OrderItemModifyModel.cs");
+        var itemRead = Path.Combine(projects, "LegacyRelApi.Core", "Models", "OrderItemReadModel.cs");
+        var orderEntity = Path.Combine(projects, "LegacyRelApi.Core", "Database", "Tables", "Order.cs");
+        var itemEntity = Path.Combine(projects, "LegacyRelApi.Core", "Database", "Tables", "OrderItem.cs");
+        var orderConfig = Path.Combine(projects, "LegacyRelApi.EntityFramework", "EntityConfigurations", "OrderConfig.cs");
+
+        InsertBeforeClosingBraces(orderModify, "public virtual  List<OrderItem>? OrderItems {get; set;}");
+        InsertBeforeClosingBraces(itemModify, "public  long? OrderId {get; set;}");
+        InsertBeforeClosingBraces(itemModify, "public virtual  Order? Order {get; set;}");
+        InsertBeforeClosingBraces(itemRead, "public  long? OrderId {get; set;}");
+
+        var orderLines = File.ReadAllLines(orderEntity).ToList();
+        orderLines.Insert(orderLines.FindIndex(l => l.Contains("OrderValidator _Validator;")) - 1, "public virtual  ICollection<OrderItem>? OrderItems {get; set;}");
+        File.WriteAllText(orderEntity, string.Join('\n', orderLines));
+
+        var itemLines = File.ReadAllLines(itemEntity).ToList();
+        var itemValIdx = itemLines.FindIndex(l => l.Contains("OrderItemValidator _Validator;")) - 1;
+        itemLines.Insert(itemValIdx, "public virtual  Order? Order {get; private set;}");
+        itemLines.Insert(itemValIdx, "public  long? OrderId {get; private set;}");
+        itemLines.Insert(itemLines.FindIndex(l => l.Contains("public OrderItem(")) + 10, "OrderId = dto.OrderId;");
+        itemLines.Insert(itemLines.FindIndex(l => l.Contains("public OrderItem Update(")) + 10, "OrderId = dto.OrderId;");
+        File.WriteAllText(itemEntity, string.Join('\n', itemLines));
+
+        var cfgLines = File.ReadAllLines(orderConfig).ToList();
+        cfgLines.Insert(cfgLines.FindIndex(l => l.Contains(".HasColumnType(\"datetime\");")) + 1,
+            "builder.HasMany(e => e.OrderItems).WithOne(e => e.Order).HasForeignKey(e => e.OrderId).OnDelete(DeleteBehavior.Cascade);");
+        File.WriteAllText(orderConfig, string.Join('\n', cfgLines));
+
+        var relSvc = new RelationService(_locator);
+        var removeResult = await relSvc.ApplyAsync(
+            new AddRelationRequest(slnDir, "Order", "OrderItem", "OrderId", "Guid", Remove: true));
+
+        Assert.True(removeResult.IsSuccess);
+        Assert.DoesNotContain("OrderItems", File.ReadAllText(orderModify));
+        Assert.DoesNotContain("OrderId", File.ReadAllText(itemModify));
+        Assert.DoesNotContain("Order? Order", File.ReadAllText(itemModify));
+        Assert.DoesNotContain("OrderId", File.ReadAllText(itemRead));
+        Assert.DoesNotContain("OrderItems", File.ReadAllText(orderEntity));
+        Assert.DoesNotContain("OrderId", File.ReadAllText(itemEntity));
+        Assert.DoesNotContain("Order? Order", File.ReadAllText(itemEntity));
+        Assert.DoesNotContain("HasMany(e => e.OrderItems)", File.ReadAllText(orderConfig));
     }
 
     [Fact]
@@ -367,6 +446,26 @@ public sealed class CoreGenerationServicesTests : IDisposable
     }
 
     [Fact]
+    public async Task DotnetRunner_NonZeroExitCode_ReturnsProcessFailed()
+    {
+        var runner = new DotnetRunner();
+        var result = await runner.RunAsync(_tempRoot, ["build", "NonExistentProject.csproj"]);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.PROCESS_FAILED, result.Error?.Code);
+    }
+
+    [Fact]
+    public async Task DotnetRunner_MissingWorkingDirectory_ReturnsIoError()
+    {
+        var runner = new DotnetRunner();
+        var result = await runner.RunAsync(Path.Combine(_tempRoot, "missing-dir"), ["--version"]);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.IO_ERROR, result.Error?.Code);
+    }
+
+    [Fact]
     public void ServiceCollectionExtensions_AddMmaCore_ResolvesAllServices()
     {
         var services = new ServiceCollection();
@@ -393,6 +492,41 @@ public sealed class CoreGenerationServicesTests : IDisposable
     public void NamingHelper_Pluralize_MatchesLegacyBehavior(string singular, string expected)
     {
         Assert.Equal(expected, NamingHelper.Pluralize(singular));
+    }
+
+    [Theory]
+    [InlineData("Order\n")]
+    [InlineData("Order\r\n")]
+    [InlineData("123Order")]
+    [InlineData("class")]
+    public void NamingHelper_IsValidIdentifier_RejectsTrailingNewlinesAndInvalidNames(string candidate)
+    {
+        Assert.False(NamingHelper.IsValidIdentifier(candidate));
+    }
+
+    [Theory]
+    [InlineData("My.App\n")]
+    [InlineData("My..App")]
+    [InlineData("My.class")]
+    public void NamingHelper_IsValidSolutionName_RejectsTrailingNewlinesAndInvalidNames(string candidate)
+    {
+        Assert.False(NamingHelper.IsValidSolutionName(candidate));
+    }
+
+    private static void AssertDeletedDateFluentChainIntact(string configPath)
+    {
+        var lines = File.ReadAllLines(configPath);
+        var deletedDateIdx = Array.FindIndex(lines, l => l.Contains("builder.Property(e => e.DeletedDate)", StringComparison.Ordinal));
+        Assert.True(deletedDateIdx >= 0, $"DeletedDate configuration not found in {configPath}");
+        Assert.True(deletedDateIdx + 1 < lines.Length);
+        Assert.Equal(".HasColumnType(\"datetime\");", lines[deletedDateIdx + 1].Trim());
+    }
+
+    private static void InsertBeforeClosingBraces(string path, string line)
+    {
+        var lines = File.ReadAllLines(path).ToList();
+        lines.Insert(Math.Max(0, lines.Count - 2), line);
+        File.WriteAllText(path, string.Join('\n', lines));
     }
 
     [Theory]

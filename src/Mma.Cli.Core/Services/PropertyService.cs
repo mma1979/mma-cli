@@ -131,8 +131,8 @@ public sealed class PropertyService : IPropertyService
             }
             else
             {
-                var duplicate = entityLines.Any(l => l.Contains($" {propertyName} {{", StringComparison.Ordinal))
-                                || modifyLines.Any(l => l.Contains($" {propertyName} {{", StringComparison.Ordinal));
+                var duplicate = ServiceFileHelper.HasPropertyNamed(entityLines, propertyName)
+                                || ServiceFileHelper.HasPropertyNamed(modifyLines, propertyName);
                 if (duplicate)
                 {
                     return OperationResult<GenerationSummary>.Failure(
@@ -162,12 +162,14 @@ public sealed class PropertyService : IPropertyService
                 if (!string.IsNullOrEmpty(configLine) && File.Exists(entityConfigPath))
                 {
                     var configLines = await ServiceFileHelper.ReadLinesAsync(entityConfigPath, ct).ConfigureAwait(false);
-                    var indexLine = configLines.FindIndex(l => l.Contains("builder.HasIndex(e => e.IsDeleted);", StringComparison.Ordinal));
-                    if (indexLine >= 0)
+                    if (!ServiceFileHelper.TryInsertAfterEntityConfigAnchor(configLines, configLine))
                     {
-                        configLines.Insert(Math.Min(indexLine + 2, configLines.Count), configLine);
-                        pendingWrites.Add((entityConfigPath, configLines));
+                        return OperationResult<GenerationSummary>.Failure(
+                            ErrorCodes.TEMPLATE_ERROR,
+                            $"Could not locate configuration anchor in '{entityConfigPath}'.");
                     }
+
+                    pendingWrites.Add((entityConfigPath, configLines));
                 }
             }
 

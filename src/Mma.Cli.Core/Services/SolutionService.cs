@@ -230,7 +230,7 @@ public sealed partial class SolutionService : ISolutionService
         string oldRoot,
         string solutionName)
     {
-        var segments = entryName.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var segments = entryName.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length == 0)
         {
             return (string.Empty, false, false);
