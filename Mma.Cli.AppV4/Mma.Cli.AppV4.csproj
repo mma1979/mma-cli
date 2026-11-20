@@ -19,11 +19,11 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="CliWrap" Version="3.10.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="RestSharp" Version="113.0.0" />
-    <PackageReference Include="Sharprompt" Version="3.0.1" />
-    <PackageReference Include="SharpZipLib" Version="1.4.2" />
+    <PackageReference Include="CliWrap" />
+    <PackageReference Include="Newtonsoft.Json" />
+    <PackageReference Include="RestSharp" />
+    <PackageReference Include="Sharprompt" />
+    <PackageReference Include="SharpZipLib" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="nupkg\" />
