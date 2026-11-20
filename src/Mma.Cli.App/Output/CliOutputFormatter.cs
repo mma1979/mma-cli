@@ -10,7 +10,12 @@ namespace Mma.Cli.App.Output;
 
 public sealed record CliJsonError(string Code, string Message, string? Details = null);
 
-public sealed record CliJsonEnvelope(bool Success, string Command, object? Data = null, CliJsonError? Error = null);
+public sealed record CliJsonEnvelope(
+    bool Success,
+    string Command,
+    object? Data = null,
+    CliJsonError? Error = null,
+    IReadOnlyList<string>? Warnings = null);
 
 public sealed record DoctorDotnetCheck(bool Available, string? Version, string Status, string Message);
 
@@ -29,7 +34,8 @@ public sealed record DoctorReport(
     string WorkspaceDbPath,
     bool WorkspaceDbAccessible,
     string WorkspaceDbStatus,
-    DoctorSolutionCheck Solution);
+    DoctorSolutionCheck Solution,
+    string? WorkspaceDbMessage = null);
 
 public static class CliOutputFormatter
 {
@@ -62,7 +68,8 @@ public static class CliOutputFormatter
     {
         if (json)
         {
-            WriteJson(outputWriter, new CliJsonEnvelope(true, command, data));
+            var effectiveWarnings = warnings is { Count: > 0 } ? warnings : null;
+            WriteJson(outputWriter, new CliJsonEnvelope(true, command, data, Warnings: effectiveWarnings));
             return;
         }
 
@@ -233,10 +240,14 @@ public static class CliOutputFormatter
             FormatStatusMarkup(report.DotnetEf.Status),
             Markup.Escape(report.DotnetEf.Version ?? report.DotnetEf.Message));
 
+        var dbDetail = string.IsNullOrWhiteSpace(report.WorkspaceDbMessage)
+            ? report.WorkspaceDbPath
+            : $"{report.WorkspaceDbPath} ({report.WorkspaceDbMessage})";
+
         table.AddRow(
             "Workspace DB",
             FormatStatusMarkup(report.WorkspaceDbStatus),
-            Markup.Escape(report.WorkspaceDbPath));
+            Markup.Escape(dbDetail));
 
         var solutionDetail = report.Solution.Found
             ? $"{report.Solution.SolutionName} ({report.Solution.Message})"

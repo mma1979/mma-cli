@@ -119,17 +119,25 @@ public static class NewCommand
 
         var solutionPath = Path.Combine(parentDir, solutionName);
         int? workspaceId = null;
+        var warnings = new List<string>(result.Warnings);
 
         if (!dryRun)
         {
-            var registry = scope.ServiceProvider.GetRequiredService<IWorkspaceRegistry>();
-            await registry.EnsureInitializedAsync(ct).ConfigureAwait(false);
-            var record = await registry.RegisterAsync(
-                solutionName,
-                solutionPath,
-                mapperKind.ToFolderName(),
-                ct).ConfigureAwait(false);
-            workspaceId = record.Id;
+            try
+            {
+                var registry = scope.ServiceProvider.GetRequiredService<IWorkspaceRegistry>();
+                await registry.EnsureInitializedAsync(ct).ConfigureAwait(false);
+                var record = await registry.RegisterAsync(
+                    solutionName,
+                    solutionPath,
+                    mapperKind.ToFolderName(),
+                    ct).ConfigureAwait(false);
+                workspaceId = record.Id;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                warnings.Add($"Workspace registry update failed: {ex.Message}");
+            }
         }
 
         var data = new
@@ -154,7 +162,7 @@ public static class NewCommand
                 ? $"Dry run: solution '{solutionName}' planned at '{solutionPath}'."
                 : $"Solution '{solutionName}' created at '{solutionPath}'.",
             result.Value,
-            result.Warnings);
+            warnings);
 
         return 0;
     }

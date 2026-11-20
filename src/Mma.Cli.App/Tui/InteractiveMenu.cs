@@ -115,9 +115,10 @@ public static class InteractiveMenu
                 .AddChoices("AutoMapper", "Mapster"),
             ct).ConfigureAwait(false);
 
-        var outputDir = await console.PromptAsync(
-            new TextPrompt<string>("Parent directory:")
-                .DefaultValue(currentDirectoryProvider()),
+        var outputDir = await PromptDirectoryPathAsync(
+            console,
+            "Parent directory",
+            currentDirectoryProvider(),
             ct).ConfigureAwait(false);
 
         await NewCommand.ExecuteAsync(
@@ -276,10 +277,22 @@ public static class InteractiveMenu
         IAnsiConsole console,
         Func<string> currentDirectoryProvider,
         CancellationToken ct) =>
-        console.PromptAsync(
-            new TextPrompt<string>("Solution path:")
-                .DefaultValue(currentDirectoryProvider()),
-            ct);
+        PromptDirectoryPathAsync(console, "Solution path", currentDirectoryProvider(), ct);
+
+    private static async Task<string> PromptDirectoryPathAsync(
+        IAnsiConsole console,
+        string label,
+        string defaultPath,
+        CancellationToken ct)
+    {
+        var promptText = $"{Markup.Escape(label)} [green]({Markup.Escape(defaultPath)})[/]:";
+        var entered = await console.PromptAsync(
+            new TextPrompt<string>(promptText)
+                .AllowEmpty(),
+            ct).ConfigureAwait(false);
+
+        return string.IsNullOrWhiteSpace(entered) ? defaultPath : entered.Trim();
+    }
 
     private static Task<string> PromptIdentifierAsync(
         IAnsiConsole console,
@@ -298,7 +311,8 @@ public static class InteractiveMenu
         CancellationToken ct) =>
         console.PromptAsync(
             new SelectionPrompt<string>()
-                .Title(title)
+                .Title(Markup.Escape(title))
+                .UseConverter(Markup.Escape)
                 .AddChoices(DataTypes.All),
             ct);
 }

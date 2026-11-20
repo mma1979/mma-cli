@@ -139,38 +139,53 @@ public static class CliApp
     internal static async Task SyncWorkspaceFromManifestAsync(
         IServiceProvider services,
         string solutionPath,
+        ICollection<string> warnings,
         CancellationToken ct)
     {
-        await using var scope = services.CreateAsyncScope();
-        var locator = scope.ServiceProvider.GetRequiredService<ISolutionLocator>();
-        var manifestStore = scope.ServiceProvider.GetRequiredService<IManifestStore>();
-        var registry = scope.ServiceProvider.GetRequiredService<IWorkspaceRegistry>();
-
-        var located = locator.Locate(solutionPath);
-        var effectiveSolutionPath = located.IsSuccess && located.Value is not null
-            ? located.Value.SolutionPath
-            : Path.GetFullPath(solutionPath);
-
-        var manifestResult = await manifestStore.LoadAsync(effectiveSolutionPath, ct).ConfigureAwait(false);
-        if (!manifestResult.IsSuccess || manifestResult.Value is null)
+        try
         {
-            return;
+            await using var scope = services.CreateAsyncScope();
+            var locator = scope.ServiceProvider.GetRequiredService<ISolutionLocator>();
+            var manifestStore = scope.ServiceProvider.GetRequiredService<IManifestStore>();
+            var registry = scope.ServiceProvider.GetRequiredService<IWorkspaceRegistry>();
+
+            var located = locator.Locate(solutionPath);
+            var effectiveSolutionPath = located.IsSuccess && located.Value is not null
+                ? located.Value.SolutionPath
+                : Path.GetFullPath(solutionPath);
+
+            var manifestResult = await manifestStore.LoadAsync(effectiveSolutionPath, ct).ConfigureAwait(false);
+            if (!manifestResult.IsSuccess || manifestResult.Value is null)
+            {
+                return;
+            }
+
+            await registry.EnsureInitializedAsync(ct).ConfigureAwait(false);
+            var workspace = await registry.GetByPathAsync(effectiveSolutionPath, ct).ConfigureAwait(false);
+            if (workspace is null && located.IsSuccess && located.Value is not null)
+            {
+                workspace = await registry.RegisterAsync(
+                    located.Value.SolutionName,
+                    effectiveSolutionPath,
+                    manifestResult.Value.Manifest.Mapper,
+                    ct).ConfigureAwait(false);
+            }
+
+            if (workspace is not null)
+            {
+                var syncResult = await registry.SyncFromManifestAsync(
+                    workspace.Id,
+                    manifestResult.Value.Manifest,
+                    ct).ConfigureAwait(false);
+                if (!syncResult.IsSuccess)
+                {
+                    warnings.Add($"Workspace registry sync failed: {syncResult.Error?.Message ?? "Unknown error"}");
+                }
+            }
         }
-
-        await registry.EnsureInitializedAsync(ct).ConfigureAwait(false);
-        var workspace = await registry.GetByPathAsync(effectiveSolutionPath, ct).ConfigureAwait(false);
-        if (workspace is null && located.IsSuccess && located.Value is not null)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            workspace = await registry.RegisterAsync(
-                located.Value.SolutionName,
-                effectiveSolutionPath,
-                manifestResult.Value.Manifest.Mapper,
-                ct).ConfigureAwait(false);
-        }
-
-        if (workspace is not null)
-        {
-            await registry.SyncFromManifestAsync(workspace.Id, manifestResult.Value.Manifest, ct).ConfigureAwait(false);
+            warnings.Add($"Workspace registry sync failed: {ex.Message}");
         }
     }
 }

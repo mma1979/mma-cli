@@ -1,12 +1,18 @@
+using System.Net;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Mma.Cli.App;
+using Mma.Cli.App.Tui;
+using Mma.Cli.Core.Export;
 using Mma.Cli.Core.Manifest;
 using Mma.Cli.Core.Results;
 using Mma.Cli.Database;
+using Mma.Cli.Database.Entities;
 using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace Mma.Cli.Core.Tests;
 
@@ -96,14 +102,7 @@ public sealed class CliCommandRoutingTests : IDisposable
         Assert.True(root.GetProperty("success").GetBoolean());
         Assert.True(root.GetProperty("data").GetProperty("dryRun").GetBoolean());
         Assert.False(Directory.Exists(Path.Combine(_tempRoot, "DryApi")));
-
-        if (File.Exists(_dbPath))
-        {
-            await using var scope = services.CreateAsyncScope();
-            var registry = scope.ServiceProvider.GetRequiredService<IWorkspaceRegistry>();
-            await registry.EnsureInitializedAsync();
-            Assert.Empty(await registry.ListAsync());
-        }
+        Assert.False(File.Exists(_dbPath));
     }
 
     [Fact]
@@ -506,6 +505,417 @@ public sealed class CliCommandRoutingTests : IDisposable
             Assert.DoesNotContain("Process.GetProcessesByName", raw, StringComparison.Ordinal);
             Assert.DoesNotContain("Console.Clear", raw, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public async Task InteractiveMenu_GenerateEntityAndExit_EscapesByteArrayAndBracketedDefaultPath()
+    {
+        var bracketedDir = Path.Combine(_tempRoot, "tui-[bracket]");
+        Directory.CreateDirectory(bracketedDir);
+
+        await using var services = CliApp.BuildServiceProvider(_dbPath);
+        Assert.Equal(0, await RunJsonCommandAsync(services, ["n", "MenuApi", "--output", bracketedDir, "--json"], bracketedDir));
+        var slnDir = Path.Combine(bracketedDir, "MenuApi");
+
+        var scriptedInput = new ScriptedAnsiConsoleInput();
+        // 1. Select "Generate Entity" (index 1)
+        scriptedInput.PushKey(ConsoleKey.DownArrow);
+        scriptedInput.PushKey(ConsoleKey.Enter);
+        // 2. Accept default solution path (slnDir containing "[bracket]")
+        scriptedInput.PushKey(ConsoleKey.Enter);
+        // 3. Enter entity name "Widget"
+        scriptedInput.PushText("Widget");
+        scriptedInput.PushKey(ConsoleKey.Enter);
+        // 4. Select "Guid" (index 0) from DataTypes.All (which renders "byte[]")
+        scriptedInput.PushKey(ConsoleKey.Enter);
+        // 5. Confirm "Generate API controller?" default (Yes)
+        scriptedInput.PushKey(ConsoleKey.Enter);
+        // 6. Select "Exit" (index 8 from 9 choices)
+        for (var i = 0; i < 8; i++)
+        {
+            scriptedInput.PushKey(ConsoleKey.DownArrow);
+        }
+        scriptedInput.PushKey(ConsoleKey.Enter);
+
+        using var consoleWriter = new StringWriter();
+        using var outputWriter = new StringWriter();
+        var console = new ScriptedAnsiConsole(consoleWriter, scriptedInput);
+
+        var exitCode = await InteractiveMenu.RunAsync(
+            services,
+            console,
+            outputWriter,
+            () => slnDir);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("byte[]", consoleWriter.ToString(), StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(slnDir, "MenuApi", "MenuApi.Core", "Database", "Tables", "Widget.cs")));
+    }
+
+    [Fact]
+    public async Task WatchCommand_WhenManifestChanges_DebouncesAndInvokesExporter()
+    {
+        await using var baseServices = CliApp.BuildServiceProvider(_dbPath);
+        Assert.Equal(0, await RunJsonCommandAsync(baseServices, ["n", "SpyWatchApi", "--output", _tempRoot, "--json"], _tempRoot));
+        var slnDir = Path.Combine(_tempRoot, "SpyWatchApi");
+
+        var spyExporter = new SpySolutionExporter();
+        var collection = new ServiceCollection();
+        collection.AddMmaCore();
+        collection.AddMmaDatabase(_dbPath);
+        collection.Replace(ServiceDescriptor.Transient<ISolutionExporter>(_ => spyExporter));
+        await using var services = collection.BuildServiceProvider();
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var watchOut = new StringWriter();
+        using var watchErr = new StringWriter();
+        using var watchConsole = new StringWriter();
+
+        var watchTask = CliApp.RunAsync(
+            ["watch", slnDir, "--json"],
+            services,
+            CreateTestConsole(watchConsole),
+            watchOut,
+            watchErr,
+            () => _tempRoot,
+            isInteractive: false,
+            ct: cts.Token);
+
+        await Task.Delay(200);
+
+        var manifestPath = Path.Combine(slnDir, ".mma", "project.mma");
+        var tempManifestPath = Path.Combine(slnDir, ".mma", $"project.mma.{Guid.NewGuid():N}.tmp");
+        var existingContent = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(tempManifestPath, existingContent + " ");
+        File.Move(tempManifestPath, manifestPath, overwrite: true);
+
+        var exportedSolution = await spyExporter.FirstExportTask.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(Path.GetFullPath(slnDir), Path.GetFullPath(exportedSolution));
+
+        await cts.CancelAsync();
+        var exitCode = await watchTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.True(spyExporter.InvocationCount >= 1);
+        Assert.Equal(string.Empty, watchConsole.ToString());
+
+        using var doc = JsonDocument.Parse(watchOut.ToString());
+        Assert.True(doc.RootElement.GetProperty("success").GetBoolean());
+        Assert.True(doc.RootElement.GetProperty("data").GetProperty("exportCount").GetInt32() >= 1);
+    }
+
+    [Fact]
+    public async Task Cli_ParseErrorWithJson_ReturnsOneAndValidationErrorJsonEnvelope()
+    {
+        await using var services = CliApp.BuildServiceProvider(_dbPath);
+        using var outputWriter = new StringWriter();
+        using var errorWriter = new StringWriter();
+        using var consoleWriter = new StringWriter();
+
+        var exitCode = await CliApp.RunAsync(
+            ["new", "--json"],
+            services,
+            CreateTestConsole(consoleWriter),
+            outputWriter,
+            errorWriter,
+            () => _tempRoot,
+            isInteractive: false);
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(string.Empty, consoleWriter.ToString());
+
+        using var doc = JsonDocument.Parse(outputWriter.ToString());
+        var root = doc.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.Equal(ErrorCodes.VALIDATION_ERROR, root.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Theory]
+    [InlineData("0", ErrorCodes.VALIDATION_ERROR)]
+    [InlineData("70000", ErrorCodes.VALIDATION_ERROR)]
+    [InlineData("5180", ErrorCodes.IO_ERROR)]
+    public async Task Cli_UiCommand_InvalidPortAndMissingBinary_ReturnsOneWithStructuredJson(string port, string expectedCode)
+    {
+        await using var services = CliApp.BuildServiceProvider(_dbPath);
+        using var outputWriter = new StringWriter();
+        using var errorWriter = new StringWriter();
+        using var consoleWriter = new StringWriter();
+
+        var exitCode = await CliApp.RunAsync(
+            ["ui", "--port", port, "--json"],
+            services,
+            CreateTestConsole(consoleWriter),
+            outputWriter,
+            errorWriter,
+            () => _tempRoot,
+            isInteractive: false);
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(string.Empty, consoleWriter.ToString());
+
+        using var doc = JsonDocument.Parse(outputWriter.ToString());
+        var root = doc.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.Equal("ui", root.GetProperty("command").GetString());
+        Assert.Equal(expectedCode, root.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Cli_ImportCommand_MissingManifestAndUnreachableEndpoint_ReturnsErrorCodes()
+    {
+        var slnDir = Path.Combine(_tempRoot, "ImportCheckApi");
+        Directory.CreateDirectory(slnDir);
+        await File.WriteAllTextAsync(Path.Combine(slnDir, "ImportCheckApi.sln"), string.Empty);
+
+        await using var services = CliApp.BuildServiceProvider(_dbPath);
+        using (var missingOut = new StringWriter())
+        using (var missingErr = new StringWriter())
+        using (var missingConsole = new StringWriter())
+        {
+            var missingExit = await CliApp.RunAsync(
+                ["import", slnDir, "--json"],
+                services,
+                CreateTestConsole(missingConsole),
+                missingOut,
+                missingErr,
+                () => _tempRoot,
+                isInteractive: false);
+
+            Assert.Equal(1, missingExit);
+            Assert.Equal(string.Empty, missingConsole.ToString());
+            using var missingDoc = JsonDocument.Parse(missingOut.ToString());
+            Assert.False(missingDoc.RootElement.GetProperty("success").GetBoolean());
+            Assert.Equal(ErrorCodes.IO_ERROR, missingDoc.RootElement.GetProperty("error").GetProperty("code").GetString());
+        }
+
+        var mmaDir = Path.Combine(slnDir, ".mma");
+        Directory.CreateDirectory(mmaDir);
+        await File.WriteAllTextAsync(Path.Combine(mmaDir, "project.mma"), """{"schemaVersion":2,"solutionName":"ImportCheckApi"}""");
+        await File.WriteAllTextAsync(Path.Combine(mmaDir, "config.json"), """{"GeneratorEndpoint":"http://127.0.0.1:59999"}""");
+
+        var collection = new ServiceCollection();
+        collection.AddMmaCore();
+        collection.AddMmaDatabase(_dbPath);
+        collection.Replace(ServiceDescriptor.Singleton<IHttpClientFactory>(new FailingHttpClientFactory()));
+        await using var failingServices = collection.BuildServiceProvider();
+
+        using var httpOut = new StringWriter();
+        using var httpErr = new StringWriter();
+        using var httpConsole = new StringWriter();
+        var httpExit = await CliApp.RunAsync(
+            ["import", slnDir, "--json"],
+            failingServices,
+            CreateTestConsole(httpConsole),
+            httpOut,
+            httpErr,
+            () => _tempRoot,
+            isInteractive: false);
+
+        Assert.Equal(1, httpExit);
+        Assert.Equal(string.Empty, httpConsole.ToString());
+        using var httpDoc = JsonDocument.Parse(httpOut.ToString());
+        Assert.False(httpDoc.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal(ErrorCodes.HTTP_ERROR, httpDoc.RootElement.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Cli_RegistryFailure_EmitsWarningInJsonAndHumanOutputWithoutFailingScaffold()
+    {
+        var collection = new ServiceCollection();
+        collection.AddMmaCore();
+        collection.AddMmaDatabase(_dbPath);
+        collection.Replace(ServiceDescriptor.Scoped<IWorkspaceRegistry>(_ => new ThrowingWorkspaceRegistry()));
+        await using var services = collection.BuildServiceProvider();
+
+        using (var newOut = new StringWriter())
+        using (var newErr = new StringWriter())
+        using (var newConsole = new StringWriter())
+        {
+            var newExit = await CliApp.RunAsync(
+                ["n", "WarnApi", "--output", _tempRoot, "--json"],
+                services,
+                CreateTestConsole(newConsole),
+                newOut,
+                newErr,
+                () => _tempRoot,
+                isInteractive: false);
+
+            Assert.Equal(0, newExit);
+            Assert.True(File.Exists(Path.Combine(_tempRoot, "WarnApi", "WarnApi.sln")));
+            using var doc = JsonDocument.Parse(newOut.ToString());
+            Assert.True(doc.RootElement.GetProperty("success").GetBoolean());
+            Assert.Contains(
+                doc.RootElement.GetProperty("warnings").EnumerateArray(),
+                w => w.GetString()!.Contains("simulated sqlite failure", StringComparison.Ordinal));
+        }
+
+        var slnDir = Path.Combine(_tempRoot, "WarnApi");
+        using var entityOut = new StringWriter();
+        using var entityErr = new StringWriter();
+        using var entityConsole = new StringWriter();
+        var entityExit = await CliApp.RunAsync(
+            ["g", "e", "Ticket", "--solution", slnDir],
+            services,
+            CreateTestConsole(entityConsole),
+            entityOut,
+            entityErr,
+            () => _tempRoot,
+            isInteractive: false);
+
+        Assert.Equal(0, entityExit);
+        Assert.True(File.Exists(Path.Combine(slnDir, "WarnApi", "WarnApi.Core", "Database", "Tables", "Ticket.cs")));
+        Assert.Contains("Warning:", entityConsole.ToString(), StringComparison.Ordinal);
+        Assert.Contains("simulated sqlite failure", entityConsole.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Cli_DoctorCommand_WhenDbThrows_KeepsCleanWorkspaceDbPathAndReportsError()
+    {
+        var collection = new ServiceCollection();
+        collection.AddMmaCore();
+        collection.AddMmaDatabase(_dbPath);
+        collection.Replace(ServiceDescriptor.Scoped<IWorkspaceRegistry>(_ => new ThrowingWorkspaceRegistry()));
+        await using var services = collection.BuildServiceProvider();
+
+        using var outputWriter = new StringWriter();
+        using var errorWriter = new StringWriter();
+        using var consoleWriter = new StringWriter();
+
+        var exitCode = await CliApp.RunAsync(
+            ["doctor", "--json"],
+            services,
+            CreateTestConsole(consoleWriter),
+            outputWriter,
+            errorWriter,
+            () => _tempRoot,
+            isInteractive: false);
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(string.Empty, consoleWriter.ToString());
+
+        using var doc = JsonDocument.Parse(outputWriter.ToString());
+        var root = doc.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        var data = root.GetProperty("data");
+        Assert.False(data.GetProperty("workspaceDbAccessible").GetBoolean());
+        Assert.Equal("Error", data.GetProperty("workspaceDbStatus").GetString());
+        Assert.Equal(_dbPath, data.GetProperty("workspaceDbPath").GetString());
+        Assert.Contains("simulated sqlite failure", data.GetProperty("workspaceDbMessage").GetString(), StringComparison.Ordinal);
+    }
+
+    private sealed class SpySolutionExporter : ISolutionExporter
+    {
+        private readonly TaskCompletionSource<string> _firstExport = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _invocationCount;
+
+        public Task<string> FirstExportTask => _firstExport.Task;
+        public int InvocationCount => Volatile.Read(ref _invocationCount);
+
+        public Task<OperationResult> ExportAsync(string solutionPath, CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _invocationCount);
+            _firstExport.TrySetResult(solutionPath);
+            return Task.FromResult(OperationResult.Success());
+        }
+    }
+
+    private sealed class FailingHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(new ThrowingHttpHandler());
+
+        private sealed class ThrowingHttpHandler : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+                throw new HttpRequestException("Simulated connection refused.");
+        }
+    }
+
+    private sealed class ThrowingWorkspaceRegistry : IWorkspaceRegistry
+    {
+        public Task EnsureInitializedAsync(CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated sqlite failure");
+
+        public Task<WorkspaceRecord> RegisterAsync(string name, string solutionPath, string mapper, CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated sqlite failure");
+
+        public Task<IReadOnlyList<WorkspaceRecord>> ListAsync(CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated sqlite failure");
+
+        public Task<WorkspaceRecord?> GetByIdAsync(int workspaceId, CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated sqlite failure");
+
+        public Task<WorkspaceRecord?> GetByPathAsync(string solutionPath, CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated sqlite failure");
+
+        public Task<OperationResult<WorkspaceRecord>> SyncFromManifestAsync(int workspaceId, ProjectManifest manifest, CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated sqlite failure");
+
+        public Task<WorkspaceEntityRecord?> FindEntityAsync(int workspaceId, string entityName, CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated sqlite failure");
+
+        public Task<bool> RemoveAsync(int workspaceId, CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated sqlite failure");
+    }
+
+    private sealed class ScriptedAnsiConsoleInput : IAnsiConsoleInput
+    {
+        private readonly Queue<ConsoleKeyInfo> _keys = new();
+
+        public void PushKey(ConsoleKey key)
+        {
+            var ch = key == ConsoleKey.Enter ? '\r' : '\0';
+            _keys.Enqueue(new ConsoleKeyInfo(ch, key, shift: false, alt: false, control: false));
+        }
+
+        public void PushText(string text)
+        {
+            foreach (var ch in text)
+            {
+                var key = char.ToUpperInvariant(ch) switch
+                {
+                    >= 'A' and <= 'Z' => (ConsoleKey)char.ToUpperInvariant(ch),
+                    _ => ConsoleKey.NoName
+                };
+                _keys.Enqueue(new ConsoleKeyInfo(ch, key, char.IsUpper(ch), alt: false, control: false));
+            }
+        }
+
+        public bool IsKeyAvailable() => _keys.Count > 0;
+
+        public ConsoleKeyInfo? ReadKey(bool intercept) =>
+            _keys.Count > 0 ? _keys.Dequeue() : null;
+
+        public Task<ConsoleKeyInfo?> ReadKeyAsync(bool intercept, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(ReadKey(intercept));
+        }
+    }
+
+    private sealed class ScriptedAnsiConsole : IAnsiConsole
+    {
+        private readonly IAnsiConsole _inner;
+
+        public ScriptedAnsiConsole(TextWriter writer, IAnsiConsoleInput input)
+        {
+            _inner = AnsiConsole.Create(new AnsiConsoleSettings
+            {
+                Ansi = AnsiSupport.Yes,
+                ColorSystem = ColorSystemSupport.NoColors,
+                Interactive = InteractionSupport.Yes,
+                Out = new AnsiConsoleOutput(writer)
+            });
+            Input = input;
+        }
+
+        public Profile Profile => _inner.Profile;
+        public IAnsiConsoleCursor Cursor => _inner.Cursor;
+        public IAnsiConsoleInput Input { get; }
+        public IExclusivityMode ExclusivityMode => _inner.ExclusivityMode;
+        public RenderPipeline Pipeline => _inner.Pipeline;
+        public void Clear(bool home) => _inner.Clear(home);
+        public void Write(IRenderable renderable) => _inner.Write(renderable);
+        public void WriteAnsi(Action<AnsiWriter> action) => _inner.WriteAnsi(action);
     }
 
     private static async Task<int> RunJsonCommandAsync(IServiceProvider services, string[] args, string cwd)

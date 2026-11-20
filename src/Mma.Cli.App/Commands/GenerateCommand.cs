@@ -296,9 +296,10 @@ public static class GenerateCommand
             return 1;
         }
 
+        var warnings = new List<string>(result.Warnings);
         if (!dryRun)
         {
-            await CliApp.SyncWorkspaceFromManifestAsync(services, solutionPath, ct).ConfigureAwait(false);
+            await CliApp.SyncWorkspaceFromManifestAsync(services, solutionPath, warnings, ct).ConfigureAwait(false);
         }
 
         var data = new
@@ -323,7 +324,7 @@ public static class GenerateCommand
                 ? $"Dry run: entity '{name}' planned for '{solutionPath}'."
                 : $"Entity '{name}' generated in '{solutionPath}'.",
             result.Value,
-            result.Warnings);
+            warnings);
 
         return 0;
     }
@@ -366,9 +367,10 @@ public static class GenerateCommand
             return 1;
         }
 
+        var warnings = new List<string>(result.Warnings);
         if (!dryRun)
         {
-            await CliApp.SyncWorkspaceFromManifestAsync(services, solutionPath, ct).ConfigureAwait(false);
+            await CliApp.SyncWorkspaceFromManifestAsync(services, solutionPath, warnings, ct).ConfigureAwait(false);
         }
 
         var data = new
@@ -396,7 +398,7 @@ public static class GenerateCommand
                 ? $"Dry run: property '{entity}.{property}' {(remove ? "removal" : "addition")} planned."
                 : $"Property '{entity}.{property}' {verb}.",
             result.Value,
-            result.Warnings);
+            warnings);
 
         return 0;
     }
@@ -439,9 +441,10 @@ public static class GenerateCommand
             return 1;
         }
 
+        var warnings = new List<string>(result.Warnings);
         if (!dryRun)
         {
-            await CliApp.SyncWorkspaceFromManifestAsync(services, solutionPath, ct).ConfigureAwait(false);
+            await CliApp.SyncWorkspaceFromManifestAsync(services, solutionPath, warnings, ct).ConfigureAwait(false);
         }
 
         var data = new
@@ -469,7 +472,7 @@ public static class GenerateCommand
                 ? $"Dry run: relation '{parent} -> {child}' {(remove ? "removal" : "addition")} planned."
                 : $"Relation '{parent} -> {child}' ({foreignKey}) {verb}.",
             result.Value,
-            result.Warnings);
+            warnings);
 
         return 0;
     }

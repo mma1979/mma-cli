@@ -80,17 +80,22 @@ public static class DoctorCommand
         var dbPath = ResolveEffectiveDbPath(dbContext);
         bool dbAccessible;
         string dbStatus;
+        string? dbMessage = null;
         try
         {
             await registry.EnsureInitializedAsync(ct).ConfigureAwait(false);
             dbAccessible = await dbContext.Database.CanConnectAsync(ct).ConfigureAwait(false);
             dbStatus = dbAccessible ? "Ok" : "Error";
+            if (!dbAccessible)
+            {
+                dbMessage = "Unable to open SQLite database connection.";
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             dbAccessible = false;
             dbStatus = "Error";
-            dbPath = $"{dbPath} ({ex.Message})";
+            dbMessage = ex.Message;
         }
 
         var (solutionCheck, criticalSolutionFailure) = await EvaluateSolutionAsync(
@@ -106,7 +111,8 @@ public static class DoctorCommand
             dbPath,
             dbAccessible,
             dbStatus,
-            solutionCheck);
+            solutionCheck,
+            dbMessage);
 
         var passed = sdkCheck.Available && dbAccessible && !criticalSolutionFailure;
         CliOutputFormatter.WriteDoctorReport(console, outputWriter, json, report, passed);

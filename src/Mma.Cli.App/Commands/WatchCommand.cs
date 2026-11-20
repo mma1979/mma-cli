@@ -156,6 +156,11 @@ public static class WatchCommand
                 }
 
                 var exportResult = await exporter.ExportAsync(info.SolutionPath, ct).ConfigureAwait(false);
+                if (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+
                 if (exportResult.IsSuccess)
                 {
                     exportCount++;
