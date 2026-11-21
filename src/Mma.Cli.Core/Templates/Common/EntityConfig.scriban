@@ -1,0 +1,50 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+using {{ solution_name }}.Core.Database.Identity;
+using {{ solution_name }}.Core.Database.Tables;
+
+using {{ solution_name }}.EntityFramework.Infrastrcture.ValueGenerator;
+
+namespace {{ solution_name }}.EntityFramework.EntityConfigurations
+{
+	public class {{ entity_name }}Config : IEntityTypeConfiguration<{{ entity_name }}>
+	{
+		private readonly string _schema;
+		public {{ entity_name }}Config(string schema = "dbo")
+		{
+			_schema = schema;
+		}
+
+	   
+		public void Configure(EntityTypeBuilder<{{ entity_name }}> builder)
+		{
+			builder.ToTable("{{ entity_set_name }}", _schema);
+			
+			/* // Uncoment if the PK is Guid
+			 builder.Property(e => e.Id)
+			  .ValueGeneratedOnAdd()
+			  .HasValueGenerator<GuidV7ValueGenerator>();
+			*/
+
+			 builder.HasQueryFilter(e => e.IsDeleted != true);
+			builder.Property(e => e.IsDeleted).IsRequired()
+				.HasDefaultValueSql("((0))");
+
+
+			builder.Property(e => e.CreatedDate)
+			 .HasColumnType("datetime")
+			 .ValueGeneratedOnAdd()
+			 .HasValueGenerator<CreatedDateTimeValueGenerator>();
+
+			builder.Property(e => e.ModifiedDate)
+				.HasColumnType("datetime");
+
+			builder.HasIndex(e => e.IsDeleted);
+			builder.Property(e => e.DeletedDate)
+				.HasColumnType("datetime");
+
+
+		}
+	}
+}

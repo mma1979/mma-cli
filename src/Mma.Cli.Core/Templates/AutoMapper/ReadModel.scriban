@@ -1,0 +1,17 @@
+using System;
+using {{ solution_name }}.Core.Database.Identity;
+
+namespace {{ solution_name }}.Core.Database.Tables
+{
+    public partial class {{ entity_name }}ReadModel
+    {
+        public {{ pk }} Id { get;  set; }
+        public Guid? CreatedBy { get;  set; }
+        public DateTime? CreatedDate { get;  set; }
+        public Guid? ModifiedBy { get;  set; }
+        public DateTime? ModifiedDate { get;  set; }
+        public bool? IsDeleted { get;  set; }
+        public Guid? DeletedBy { get;  set; }
+        public DateTime? DeletedDate { get;  set; }
+    }
+}

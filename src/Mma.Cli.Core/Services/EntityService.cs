@@ -1,4 +1,6 @@
+using System.Text;
 using Microsoft.Extensions.Logging;
+using Mma.Cli.Core.CodeGen;
 using Mma.Cli.Core.Contracts;
 using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Events;
@@ -16,13 +18,17 @@ public sealed class EntityService : IEntityService
     private readonly ILogger<EntityService>? _logger;
     private readonly ISolutionLockManager _lockManager;
     private readonly IManifestStore _manifestStore;
+    private readonly ITemplateRenderer _templateRenderer;
+    private readonly IDryRunDiffEngine _diffEngine;
 
     public EntityService(
         ISolutionLocator solutionLocator,
         ITemplateProvider templateProvider,
         ILogger<EntityService>? logger = null,
         ISolutionLockManager? lockManager = null,
-        IManifestStore? manifestStore = null)
+        IManifestStore? manifestStore = null,
+        ITemplateRenderer? templateRenderer = null,
+        IDryRunDiffEngine? diffEngine = null)
     {
         ArgumentNullException.ThrowIfNull(solutionLocator);
         ArgumentNullException.ThrowIfNull(templateProvider);
@@ -32,6 +38,8 @@ public sealed class EntityService : IEntityService
         _logger = logger;
         _lockManager = lockManager ?? new SolutionLockManager();
         _manifestStore = manifestStore ?? new ManifestStore(_lockManager, solutionLocator);
+        _templateRenderer = templateRenderer ?? new ScribanTemplateRenderer(_templateProvider);
+        _diffEngine = diffEngine ?? new DryRunDiffEngine();
     }
 
     public async Task<OperationResult<GenerationSummary>> GenerateAsync(
@@ -118,26 +126,49 @@ public sealed class EntityService : IEntityService
 
             ServiceFileHelper.Report(progress, GenerationStage.Scaffolding, $"Preparing files for entity '{entityName}'.");
 
-            var createdEntries = new List<(string Path, string Content)>
+            var templateModel = new TemplateModel(
+                info.SolutionName,
+                entityName,
+                entityVarName,
+                entitySetName,
+                normalizedPk,
+                mapper,
+                Properties: [],
+                Relations: []);
+
+            var createdTemplates = new List<(string Path, string TemplateName)>
             {
-                (modifyModelPath, ApplyTokens(_templateProvider.GetTemplate(info.SolutionPath, mapper, "ModifyModel"), info.SolutionName, entityName, entityVarName, entitySetName, normalizedPk)),
-                (readModelPath, ApplyTokens(_templateProvider.GetTemplate(info.SolutionPath, mapper, "ReadModel"), info.SolutionName, entityName, entityVarName, entitySetName, normalizedPk)),
-                (validatorPath, ApplyTokens(_templateProvider.GetTemplate(info.SolutionPath, mapper, "Validator"), info.SolutionName, entityName, entityVarName, entitySetName, normalizedPk)),
-                (entityPath, ApplyTokens(_templateProvider.GetTemplate(info.SolutionPath, mapper, "Entity"), info.SolutionName, entityName, entityVarName, entitySetName, normalizedPk)),
-                (entityConfigPath, ApplyTokens(_templateProvider.GetTemplate(info.SolutionPath, mapper, "EntityConfig"), info.SolutionName, entityName, entityVarName, entitySetName, normalizedPk)),
-                (servicePath, ApplyTokens(_templateProvider.GetTemplate(info.SolutionPath, mapper, "Service"), info.SolutionName, entityName, entityVarName, entitySetName, normalizedPk))
+                (modifyModelPath, "ModifyModel"),
+                (readModelPath, "ReadModel"),
+                (validatorPath, "Validator"),
+                (entityPath, "Entity"),
+                (entityConfigPath, "EntityConfig"),
+                (servicePath, "Service")
             };
 
             if (request.GenerateApi)
             {
-                createdEntries.Add((
-                    controllerPath,
-                    ApplyTokens(_templateProvider.GetTemplate(info.SolutionPath, mapper, "Controller"), info.SolutionName, entityName, entityVarName, entitySetName, normalizedPk)));
+                createdTemplates.Add((controllerPath, "Controller"));
             }
 
-            var modifiedEntries = new List<(string Path, List<string> Lines)>();
+            var createdEntries = new List<(string Path, string Content)>(createdTemplates.Count);
+            foreach (var (path, templateName) in createdTemplates)
+            {
+                var rendered = _templateRenderer.RenderTemplate(info.SolutionPath, mapper, templateName, templateModel);
+                if (!rendered.IsSuccess || rendered.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        rendered.Error ?? new GenerationError(ErrorCodes.TEMPLATE_ERROR, $"Failed to render '{templateName}'."));
+                }
 
-            var dbContextLines = await ServiceFileHelper.ReadLinesAsync(dbContextPath, ct).ConfigureAwait(false);
+                createdEntries.Add((path, rendered.Value));
+            }
+
+            var modifiedEntries = new List<(string Path, string Content)>();
+
+            var (dbContextLines, dbContextNewLine, dbContextTrailingNewline) =
+                await ReadLinesPreservingFormatAsync(dbContextPath, ct).ConfigureAwait(false);
+
             var dbSetIdx = dbContextLines.FindLastIndex(l => l.Contains("public virtual DbSet<", StringComparison.Ordinal));
             if (dbSetIdx < 0)
             {
@@ -146,9 +177,14 @@ public sealed class EntityService : IEntityService
                     $"Could not locate DbSet anchor in '{dbContextPath}'.");
             }
 
-            dbContextLines.Insert(
-                dbSetIdx + 1,
-                ApplyTokens(_templateProvider.GetTemplate(info.SolutionPath, mapper, "DbSetEntry"), info.SolutionName, entityName, entityVarName, entitySetName, normalizedPk));
+            var dbSetRendered = _templateRenderer.RenderTemplate(info.SolutionPath, mapper, "DbSetEntry", templateModel);
+            if (!dbSetRendered.IsSuccess || dbSetRendered.Value is null)
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    dbSetRendered.Error ?? new GenerationError(ErrorCodes.TEMPLATE_ERROR, "Failed to render 'DbSetEntry'."));
+            }
+
+            dbContextLines.Insert(dbSetIdx + 1, dbSetRendered.Value);
 
             var configIdx = dbContextLines.FindLastIndex(l => l.Contains("modelBuilder.ApplyConfiguration(new", StringComparison.Ordinal));
             if (configIdx < 0)
@@ -158,15 +194,21 @@ public sealed class EntityService : IEntityService
                     $"Could not locate ApplyConfiguration anchor in '{dbContextPath}'.");
             }
 
-            dbContextLines.Insert(
-                configIdx + 1,
-                ApplyTokens(_templateProvider.GetTemplate(info.SolutionPath, mapper, "ConfigEntry"), info.SolutionName, entityName, entityVarName, entitySetName, normalizedPk));
+            var configEntryRendered = _templateRenderer.RenderTemplate(info.SolutionPath, mapper, "ConfigEntry", templateModel);
+            if (!configEntryRendered.IsSuccess || configEntryRendered.Value is null)
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    configEntryRendered.Error ?? new GenerationError(ErrorCodes.TEMPLATE_ERROR, "Failed to render 'ConfigEntry'."));
+            }
 
-            modifiedEntries.Add((dbContextPath, dbContextLines));
+            dbContextLines.Insert(configIdx + 1, configEntryRendered.Value);
+            modifiedEntries.Add((dbContextPath, JoinLinesPreservingFormat(dbContextLines, dbContextNewLine, dbContextTrailingNewline)));
 
             if (mapper == MapperKind.AutoMapper)
             {
-                var profileLines = await ServiceFileHelper.ReadLinesAsync(mappingProfilePath, ct).ConfigureAwait(false);
+                var (profileLines, profileNewLine, profileTrailingNewline) =
+                    await ReadLinesPreservingFormatAsync(mappingProfilePath, ct).ConfigureAwait(false);
+
                 var lastSemicolonIdx = profileLines.FindLastIndex(l => l.EndsWith(";", StringComparison.Ordinal));
                 if (lastSemicolonIdx < 0)
                 {
@@ -175,12 +217,40 @@ public sealed class EntityService : IEntityService
                         $"Could not locate mapping registration anchor in '{mappingProfilePath}'.");
                 }
 
-                profileLines.Insert(
-                    lastSemicolonIdx + 1,
-                    ApplyTokens(_templateProvider.GetTemplate(info.SolutionPath, mapper, "Config"), info.SolutionName, entityName, entityVarName, entitySetName, normalizedPk));
+                var autoMapperConfigRendered = _templateRenderer.RenderTemplate(info.SolutionPath, mapper, "Config", templateModel);
+                if (!autoMapperConfigRendered.IsSuccess || autoMapperConfigRendered.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        autoMapperConfigRendered.Error ?? new GenerationError(ErrorCodes.TEMPLATE_ERROR, "Failed to render 'Config'."));
+                }
 
-                modifiedEntries.Add((mappingProfilePath, profileLines));
+                var normalizedConfig = autoMapperConfigRendered.Value
+                    .Replace("\r\n", profileNewLine, StringComparison.Ordinal);
+                profileLines.Insert(lastSemicolonIdx + 1, normalizedConfig);
+                modifiedEntries.Add((mappingProfilePath, JoinLinesPreservingFormat(profileLines, profileNewLine, profileTrailingNewline)));
             }
+
+            var stagedChanges = new List<StagedFileChange>(createdEntries.Count + modifiedEntries.Count);
+            foreach (var (path, content) in createdEntries)
+            {
+                stagedChanges.Add(new StagedFileChange(path, FileChangeKind.Create, content));
+            }
+
+            foreach (var (path, content) in modifiedEntries)
+            {
+                stagedChanges.Add(new StagedFileChange(path, FileChangeKind.Modify, content));
+            }
+
+            var planResult = await _diffEngine.ComputePlanAsync(info.SolutionPath, stagedChanges, ct).ConfigureAwait(false);
+            if (!planResult.IsSuccess || planResult.Value is null)
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    planResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to compute generation plan."));
+            }
+
+            var plan = planResult.Value;
+            var createdPaths = createdEntries.Select(e => e.Path).ToArray();
+            var modifiedPaths = modifiedEntries.Select(e => e.Path).ToArray();
 
             if (!request.DryRun)
             {
@@ -192,17 +262,20 @@ public sealed class EntityService : IEntityService
                         loadError ?? new GenerationError(ErrorCodes.MANIFEST_INVALID, "Failed to load manifest."));
                 }
 
-                foreach (var (path, content) in createdEntries)
+                var commitResult = await _diffEngine.CommitAsync(plan, ct).ConfigureAwait(false);
+                if (!commitResult.IsSuccess || commitResult.Value is null)
                 {
-                    ct.ThrowIfCancellationRequested();
-                    await ServiceFileHelper.WriteFileAsync(path, content, ct).ConfigureAwait(false);
+                    return OperationResult<GenerationSummary>.Failure(
+                        commitResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to commit entity files."));
+                }
+
+                foreach (var path in createdPaths)
+                {
                     ServiceFileHelper.Report(progress, GenerationStage.Scaffolding, $"Created {Path.GetFileName(path)}", path);
                 }
 
-                foreach (var (path, lines) in modifiedEntries)
+                foreach (var path in modifiedPaths)
                 {
-                    ct.ThrowIfCancellationRequested();
-                    await ServiceFileHelper.WriteLinesAsync(path, lines, ct).ConfigureAwait(false);
                     ServiceFileHelper.Report(progress, GenerationStage.Updating, $"Updated {Path.GetFileName(path)}", path);
                 }
 
@@ -245,10 +318,11 @@ public sealed class EntityService : IEntityService
                 entityPath);
 
             return OperationResult<GenerationSummary>.Success(new GenerationSummary(
-                createdEntries.Select(e => e.Path).ToArray(),
-                modifiedEntries.Select(e => e.Path).ToArray(),
+                createdPaths,
+                modifiedPaths,
                 Array.Empty<string>(),
-                request.DryRun));
+                request.DryRun,
+                Plan: plan));
         }
         catch (OperationCanceledException)
         {
@@ -279,17 +353,35 @@ public sealed class EntityService : IEntityService
         }
     }
 
-    private static string ApplyTokens(
-        string template,
-        string solutionName,
-        string entityName,
-        string entityVarName,
-        string entitySetName,
-        string pkType) =>
-        template
-            .Replace("$SolutionName", solutionName, StringComparison.Ordinal)
-            .Replace("$EntityName", entityName, StringComparison.Ordinal)
-            .Replace("$EntityVarName", entityVarName, StringComparison.Ordinal)
-            .Replace("$EntitySetName", entitySetName, StringComparison.Ordinal)
-            .Replace("$PK", pkType, StringComparison.Ordinal);
+    private static async Task<(List<string> Lines, string NewLine, bool HasTrailingNewline)> ReadLinesPreservingFormatAsync(
+        string path,
+        CancellationToken ct)
+    {
+        var bytes = await ServiceFileHelper.ReadFileBytesSharedAsync(path, ct).ConfigureAwait(false);
+        var text = Encoding.UTF8.GetString(ServiceFileHelper.StripUtf8Bom(bytes).Span);
+        var newLine = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        var hasTrailingNewline = text.EndsWith('\n');
+        var normalized = text.Replace("\r\n", "\n", StringComparison.Ordinal);
+        if (hasTrailingNewline)
+        {
+            normalized = normalized[..^1];
+        }
+
+        var lines = normalized.Length == 0 && !hasTrailingNewline
+            ? []
+            : normalized.Split('\n').ToList();
+
+        return (lines, newLine, hasTrailingNewline);
+    }
+
+    private static string JoinLinesPreservingFormat(IReadOnlyList<string> lines, string newLine, bool hasTrailingNewline)
+    {
+        if (lines.Count == 0)
+        {
+            return hasTrailingNewline ? newLine : string.Empty;
+        }
+
+        var joined = string.Join(newLine, lines);
+        return hasTrailingNewline ? joined + newLine : joined;
+    }
 }

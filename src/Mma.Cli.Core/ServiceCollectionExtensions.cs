@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Mma.Cli.Core.CodeGen;
 using Mma.Cli.Core.Config;
 using Mma.Cli.Core.Contracts;
 using Mma.Cli.Core.Export;
@@ -24,6 +25,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISolutionLocator, SolutionLocator>();
         services.AddSingleton<IConfigStore, JsonConfigStore>();
         services.AddSingleton<ITemplateProvider, EmbeddedTemplateProvider>();
+        services.AddSingleton<ITemplateRenderer, ScribanTemplateRenderer>();
+        services.AddSingleton<IDryRunDiffEngine, DryRunDiffEngine>();
         services.AddSingleton<IDotnetRunner, DotnetRunner>();
         services.AddSingleton<ISolutionLockManager, SolutionLockManager>();
         services.AddSingleton<IManifestStore, ManifestStore>();

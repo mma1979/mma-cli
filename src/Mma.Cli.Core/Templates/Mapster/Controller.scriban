@@ -1,0 +1,281 @@
+using {{ solution_name }}.AppApi.Controllers.v1;
+using {{ solution_name }}.Common;
+using {{ solution_name }}.AppApi.Services;
+using {{ solution_name }}.Core.Database.Tables;
+using {{ solution_name }}.Core.Models;
+using {{ solution_name }}.Services;
+using {{ solution_name }}.Core.Consts;
+using {{ solution_name }}.Common.Extensions;
+
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using {{ solution_name }}.AppApi.Infrastrcture.Attributes;
+
+using {{ solution_name }}.Core.Database.Notifications;
+
+using System.Security.Claims;
+
+namespace {{ solution_name }}.AppApi.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class {{ entity_set_name }}Controller : BaseController
+    {
+        private readonly {{ entity_name }}Service _{{ entity_var_name }}Service;
+        private readonly Translator _translator;
+        private readonly ILogger<{{ entity_set_name }}Controller> _logger;
+
+        public {{ entity_set_name }}Controller({{ entity_name }}Service {{ entity_var_name }}Service, Translator translator, ILogger<{{ entity_set_name }}Controller> logger) : base(translator)
+        {
+            _{{ entity_var_name }}Service = {{ entity_var_name }}Service;
+            _translator = translator;
+            _logger = logger;
+        }
+
+
+
+        [HttpGet]
+[RequiredPermission("Read")]
+public async Task<IActionResult> GetAll([FromQuery] QueryViewModel query, CancellationToken cancellationToken)
+{
+	if (cancellationToken.IsCancellationRequested)
+	{
+		return BadRequest(new
+		{
+			IsSuccess = false,
+			Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
+		});
+	}
+	
+	try
+	{
+		query.UserId = User.FindFirstValue("Id").ToGuid();
+	   if(string.IsNullOrEmpty(query.Fields))
+		{
+			var data = await _{{ entity_var_name }}Service.All(query);
+			data.Messages = [.. data.Messages.Select(m => _translator.Translate(m, Language))];
+			if (data.IsSuccess)
+				return Ok(data);
+
+			return BadRequest(data);
+		}
+
+		var selectedData = await _{{ entity_var_name }}Service.Select(query);
+		selectedData.Messages = [.. selectedData.Messages.Select(m => _translator.Translate(m, Language))];
+		if (selectedData.IsSuccess)
+			return Ok(selectedData);
+
+		return BadRequest(selectedData);
+
+	}
+	catch (HttpException ex)
+	{
+		_logger.LogError(ex.Message, query, ex);
+		return BadRequest(HandleHttpException<List<{{ entity_name }}ReadModel>>(ex));
+	}
+	catch (Exception ex)
+	{
+
+		_logger.LogError(ex.Message, ex);
+		var result = new ResultViewModel<List<{{ entity_name }}ReadModel>>{
+			IsSuccess = false,
+			StatusCode = 500
+		};
+		return BadRequest(result);
+	}
+}
+
+        [HttpGet("{id}")]
+		[RequiredPermission("Read")]
+        public async Task<IActionResult> GetOne({{ pk }} id, CancellationToken cancellationToken)
+        {
+			if (cancellationToken.IsCancellationRequested)
+            {
+                return BadRequest(new
+                {
+                    IsSuccess = false,
+                    Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
+                });
+            }
+            
+            try
+            {
+                var data = await _{{ entity_var_name }}Service.Find(id);
+                data.Messages = data.Messages.Select(m => _translator.Translate(m, Language)).ToList();
+
+                if (data.IsSuccess)
+
+                    return Ok(data);
+
+                return BadRequest(data);
+
+            }
+            catch (HttpException ex)
+            {
+
+                _logger.LogError(ex.Message, ex);
+                return BadRequest(HandleHttpException<{{ entity_name }}ReadModel>(ex));
+            }
+            catch (Exception ex)
+            {
+
+                _logger.LogError(ex.Message, ex);
+               var result = new ResultViewModel<List<{{ entity_name }}ReadModel>>{
+					IsSuccess = false,
+					StatusCode = 500
+				};
+                return BadRequest(result);
+            }
+        }
+
+
+
+        [HttpPost]
+		[RequiredPermission("Create")]
+        public async Task<IActionResult> Post{{ entity_name }}([FromBody] {{ entity_name }}ModifyModel model, CancellationToken cancellationToken)
+        {
+			if (cancellationToken.IsCancellationRequested)
+            {
+                return BadRequest(new
+                {
+                    IsSuccess = false,
+                    Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
+                });
+            }
+           
+            try
+            {
+                var data = await _{{ entity_var_name }}Service.Add(model);
+                data.Messages = data.Messages.Select(m => _translator.Translate(m, Language)).ToList();
+
+                if (data.IsSuccess)
+                    return Ok(data);
+
+                return BadRequest(data);
+
+            }
+            catch (HttpException ex)
+            {
+
+                _logger.LogError(ex.Message, ex);
+                return BadRequest(HandleHttpException(ex));
+            }
+            catch (Exception ex)
+            {
+
+                _logger.LogError(ex.Message, ex);
+				 var result = new AcknowledgeViewModel
+				 {
+					IsSuccess = false,
+					StatusCode = 500
+				 };
+                return BadRequest(result);
+            }
+        }
+
+        [HttpPut("{id}")]
+		[RequiredPermission("Update")]
+        public async Task<IActionResult> Put{{ entity_name }}({{ pk }} id, [FromBody] {{ entity_name }}ModifyModel model, CancellationToken cancellationToken)
+        {
+			if (cancellationToken.IsCancellationRequested)
+            {
+                return BadRequest(new
+                {
+                    IsSuccess = false,
+                    Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
+                });
+            }
+			
+            
+            try
+            {
+                if (model.Id != id)
+                {
+                   var result = new AcknowledgeViewModel{
+                      IsSuccess = false
+                    };
+                    result.Messages.Add(_translator.Translate("InvalidData", Language));
+                    return BadRequest(result);
+                }
+                var data = await _{{ entity_var_name }}Service.Update(model);
+                data.Messages = data.Messages.Select(m => _translator.Translate(m, Language)).ToList();
+
+                if (data.IsSuccess)
+                    return Ok(data);
+
+                return BadRequest(data);
+
+            }
+            catch (HttpException ex)
+            {
+
+                _logger.LogError(ex.Message, ex);
+                return BadRequest(HandleHttpException(ex));
+            }
+            catch (Exception ex)
+            {
+
+                _logger.LogError(ex.Message, ex);
+                var result = new AcknowledgeViewModel
+				 {
+					IsSuccess = false,
+					StatusCode = 500
+				 };
+                return BadRequest(result);
+            }
+        }
+
+        [HttpDelete("{id}")]
+		[RequiredPermission("Update,Delete")]
+        public async Task<IActionResult> Delete{{ entity_name }}({{ pk }} id, CancellationToken cancellationToken)
+        {
+			if (cancellationToken.IsCancellationRequested)
+            {
+                return BadRequest(new
+                {
+                    IsSuccess = false,
+                    Messages = new[] { _translator.Translate(ResourcesKeys.REQUEST_CANCELED, Language) }
+                });
+            }
+			
+            
+            try
+            {
+                var data = await _{{ entity_var_name }}Service.Delete(id);
+                data.Messages = data.Messages.Select(m => _translator.Translate(m, Language)).ToList();
+
+                if (data.IsSuccess)
+                    return Ok(data);
+
+                return BadRequest(data);
+
+            }
+            catch (HttpException ex)
+            {
+
+                _logger.LogError(ex.Message, ex);
+                return BadRequest(HandleHttpException(ex));
+            }
+            catch (Exception ex)
+            {
+
+                _logger.LogError(ex.Message, ex);
+                var result = new AcknowledgeViewModel
+				 {
+					IsSuccess = false,
+					StatusCode = 500
+				 };
+                return BadRequest(result);
+            }
+        }
+
+
+    }
+
+}

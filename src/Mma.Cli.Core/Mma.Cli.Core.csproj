@@ -11,12 +11,18 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Scriban" />
     <PackageReference Include="SharpZipLib" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="..\..\Mma.Cli.Shared\Resources\AutoMapper.zip" LogicalName="Mma.Cli.Core.Resources.AutoMapper.zip" />
     <EmbeddedResource Include="..\..\Mma.Cli.Shared\Resources\Mappster.zip" LogicalName="Mma.Cli.Core.Resources.Mappster.zip" />
+    <EmbeddedResource Include="Templates\**\*.scriban" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mma.Cli.Core.Tests" />
   </ItemGroup>
 
 </Project>

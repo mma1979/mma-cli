@@ -1,0 +1,1 @@
+CreateMap<{{ entity_name }}, {{ entity_name }}ReadModel>().IgnoreAllPropertiesWithAnInaccessibleSetter().IgnoreAllSourcePropertiesWithAnInaccessibleSetter();{{ "\r\n" }}CreateMap<{{ entity_name }}, {{ entity_name }}ModifyModel>().IgnoreAllPropertiesWithAnInaccessibleSetter().IgnoreAllSourcePropertiesWithAnInaccessibleSetter();

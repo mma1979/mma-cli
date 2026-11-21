@@ -1,0 +1,1 @@
+            public virtual DbSet<{{ entity_name }}> {{ entity_set_name }} { get; set; }

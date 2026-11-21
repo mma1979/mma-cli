@@ -1,0 +1,17 @@
+using FluentValidation;
+
+using {{ solution_name }}.Core.Database.Tables;
+
+namespace {{ solution_name }}.Core.Validations
+{
+    public class {{ entity_name }}Validator:AbstractValidator<{{ entity_name }}ModifyModel>
+    {
+
+        public {{ entity_name }}Validator()
+        {
+           
+        }
+
+
+    }
+}

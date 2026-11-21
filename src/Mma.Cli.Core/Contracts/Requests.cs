@@ -1,3 +1,4 @@
+using Mma.Cli.Core.CodeGen;
 using Mma.Cli.Core.Domain;
 
 namespace Mma.Cli.Core.Contracts;
@@ -38,4 +39,5 @@ public sealed record GenerationSummary(
     IReadOnlyList<string> CreatedFiles,
     IReadOnlyList<string> ModifiedFiles,
     IReadOnlyList<string> DeletedFiles,
-    bool DryRun);
+    bool DryRun,
+    ExecutionPlan? Plan = null);

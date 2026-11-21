@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.Extensions.Logging;
 using Mma.Cli.Core.Domain;
 
@@ -16,15 +17,45 @@ public sealed class EmbeddedTemplateProvider : ITemplateProvider
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(templateName);
 
+        var mapperFolder = mapper.ToFolderName();
+
         if (!string.IsNullOrWhiteSpace(solutionPath))
         {
-            var templatePath = Path.Combine(
-                solutionPath,
-                ".mma",
-                "templates",
-                mapper.ToFolderName(),
-                $"{templateName}.cs");
+            var customTemplate = TryLoadExternalOverride(solutionPath, mapper, mapperFolder, templateName, ".scriban")
+                ?? TryLoadExternalOverride(solutionPath, mapper, mapperFolder, templateName, ".cs");
 
+            if (customTemplate is not null)
+            {
+                return customTemplate;
+            }
+        }
+
+        var embeddedTemplate = TryLoadEmbeddedScriban(mapperFolder, templateName)
+            ?? TryLoadEmbeddedScriban("Common", templateName);
+
+        if (embeddedTemplate is not null)
+        {
+            return embeddedTemplate;
+        }
+
+        return DefaultTemplates.GetDefault(mapper, templateName);
+    }
+
+    private string? TryLoadExternalOverride(
+        string solutionPath,
+        MapperKind mapper,
+        string mapperFolder,
+        string templateName,
+        string extension)
+    {
+        var candidates = new[]
+        {
+            Path.Combine(solutionPath, ".mma", "templates", mapperFolder, $"{templateName}{extension}"),
+            Path.Combine(solutionPath, ".mma", "templates", mapperFolder.ToLowerInvariant(), $"{templateName}{extension}")
+        };
+
+        foreach (var templatePath in candidates.Distinct(StringComparer.Ordinal))
+        {
             try
             {
                 if (File.Exists(templatePath))
@@ -43,6 +74,19 @@ public sealed class EmbeddedTemplateProvider : ITemplateProvider
             }
         }
 
-        return DefaultTemplates.GetDefault(mapper, templateName);
+        return null;
+    }
+
+    private static string? TryLoadEmbeddedScriban(string folderName, string templateName)
+    {
+        var resourceName = $"Mma.Cli.Core.Templates.{folderName}.{templateName}.scriban";
+        using var stream = typeof(EmbeddedTemplateProvider).Assembly.GetManifestResourceStream(resourceName);
+        if (stream is null)
+        {
+            return null;
+        }
+
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
 }
