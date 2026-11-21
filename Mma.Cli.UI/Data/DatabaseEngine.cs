@@ -34,14 +34,20 @@ FROM
     LEFT JOIN sys.types AS t ON col.user_type_id = t.user_type_id
     LEFT JOIN (
         SELECT 
-            fk.name,
+            MIN(fk.name) AS name,
+            tab.schema_id,
             tab.name AS table_name,
             col.name AS column_name
         FROM 
             sys.foreign_keys AS fk
-            INNER JOIN sys.tables AS tab ON fk.parent_object_id = tab.object_id
-            INNER JOIN sys.columns AS col ON fk.parent_object_id = col.object_id
-    ) AS fk ON tab.name = fk.table_name AND col.name = fk.column_name
+            INNER JOIN sys.foreign_key_columns AS fkc ON fkc.constraint_object_id = fk.object_id
+            INNER JOIN sys.tables AS tab ON fkc.parent_object_id = tab.object_id
+            INNER JOIN sys.columns AS col ON fkc.parent_object_id = col.object_id AND fkc.parent_column_id = col.column_id
+        GROUP BY
+            tab.schema_id,
+            tab.name,
+            col.name
+    ) AS fk ON tab.schema_id = fk.schema_id AND tab.name = fk.table_name AND col.name = fk.column_name
 WHERE 
     tab.name NOT IN ('__EFMigrationsHistory', 'sysdiagrams', 'AppUsers', 'Attachments', 'ELMAH_Error', 'NotificationStatuses', 'NotificationTypes', 'Roles', 'SysSettings', 'Notifications', 'RefreshTokens', 'UserClaims', 'UserLogins', 'UserTokens', 'RoleClaims', 'UserRoles') AND
     col.name NOT IN ('CreatedBy', 'CreatedDate', 'ModifiedBy', 'ModifiedDate', 'IsDeleted', 'DeletedBy', 'DeletedDate')

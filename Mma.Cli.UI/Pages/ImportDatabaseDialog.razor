@@ -82,14 +82,17 @@
         {
             SqlConnectionStringBuilder builder = new();
             builder.DataSource = server;
-            builder.Authentication = authenticationType == "Windows Authentication" ?
-            SqlAuthenticationMethod.ActiveDirectoryIntegrated : SqlAuthenticationMethod.SqlPassword;
-            builder.TrustServerCertificate = true;
-            if (authenticationType == "SQL Login")
+            if (authenticationType == "Windows Authentication")
             {
+                builder.IntegratedSecurity = true;
+            }
+            else
+            {
+                builder.Authentication = SqlAuthenticationMethod.SqlPassword;
                 builder.UserID = username;
                 builder.Password = password;
             }
+            builder.TrustServerCertificate = false;
             builder.InitialCatalog = database;
 
             connectionString = builder.ConnectionString;
