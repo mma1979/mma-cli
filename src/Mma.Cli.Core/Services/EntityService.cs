@@ -225,7 +225,8 @@ public sealed class EntityService : IEntityService
                 }
 
                 var normalizedConfig = autoMapperConfigRendered.Value
-                    .Replace("\r\n", profileNewLine, StringComparison.Ordinal);
+                    .Replace("\r\n", "\n", StringComparison.Ordinal)
+                    .Replace("\n", profileNewLine, StringComparison.Ordinal);
                 profileLines.Insert(lastSemicolonIdx + 1, normalizedConfig);
                 modifiedEntries.Add((mappingProfilePath, JoinLinesPreservingFormat(profileLines, profileNewLine, profileTrailingNewline)));
             }

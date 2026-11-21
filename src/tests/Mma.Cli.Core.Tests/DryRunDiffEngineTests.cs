@@ -350,6 +350,184 @@ public sealed class DryRunDiffEngineTests : IDisposable
         Assert.False(File.Exists(secondPath));
     }
 
+    [Fact]
+    public async Task CommitAsync_WithInvalidFileChangeKindAfterValidSteps_ReturnsValidationErrorWithoutReadsOrMutations()
+    {
+        var slnDir = Path.Combine(_tempRoot, "InvalidKindSample");
+        Directory.CreateDirectory(slnDir);
+
+        var existingPath = Path.Combine(slnDir, "Existing.cs");
+        var createPath = Path.Combine(slnDir, "Created.cs");
+        var existingTargetPath = Path.Combine(slnDir, "ExistingTarget.cs");
+        var missingTargetPath = Path.Combine(slnDir, "MissingTarget.cs");
+
+        await File.WriteAllTextAsync(existingPath, "original", new UTF8Encoding(false));
+        await File.WriteAllTextAsync(existingTargetPath, "target", new UTF8Encoding(false));
+
+        var engine = new ReadCountingDiffEngine();
+        var validPlan = (await engine.ComputePlanAsync(slnDir,
+        [
+            new StagedFileChange(existingPath, FileChangeKind.Modify, "changed"),
+            new StagedFileChange(createPath, FileChangeKind.Create, "new"),
+            new StagedFileChange(existingTargetPath, FileChangeKind.Modify, "ignored")
+        ])).Value!;
+
+        engine.ResetReadCount();
+
+        var existingModifyDiff = validPlan.FileChanges[0];
+        var createDiff = validPlan.FileChanges[1];
+        var existingTargetHash = validPlan.FileChanges[2].OriginalHash;
+
+        // Case A: Invalid kind targeting a non-existent path after valid Modify + Create
+        var planWithMissingTarget = validPlan with
+        {
+            FileChanges =
+            [
+                existingModifyDiff,
+                createDiff,
+                new PlannedFileDiff(
+                    missingTargetPath,
+                    "MissingTarget.cs",
+                    (FileChangeKind)999,
+                    string.Empty,
+                    null,
+                    null,
+                    null)
+            ]
+        };
+
+        var resultA = await engine.CommitAsync(planWithMissingTarget);
+        Assert.False(resultA.IsSuccess);
+        Assert.Equal(ErrorCodes.VALIDATION_ERROR, resultA.Error?.Code);
+        Assert.Equal(0, engine.ReadCount);
+        Assert.Equal("original", await File.ReadAllTextAsync(existingPath));
+        Assert.False(File.Exists(createPath));
+
+        // Case B: Invalid kind targeting an existing path with matching hash (previously slipped into Phase 2 default:)
+        var planWithExistingTarget = validPlan with
+        {
+            FileChanges =
+            [
+                existingModifyDiff,
+                createDiff,
+                new PlannedFileDiff(
+                    existingTargetPath,
+                    "ExistingTarget.cs",
+                    (FileChangeKind)999,
+                    string.Empty,
+                    existingTargetHash,
+                    null,
+                    null)
+            ]
+        };
+
+        var resultB = await engine.CommitAsync(planWithExistingTarget);
+        Assert.False(resultB.IsSuccess);
+        Assert.Equal(ErrorCodes.VALIDATION_ERROR, resultB.Error?.Code);
+        Assert.Equal(0, engine.ReadCount);
+        Assert.Equal("original", await File.ReadAllTextAsync(existingPath));
+        Assert.False(File.Exists(createPath));
+        Assert.Equal("target", await File.ReadAllTextAsync(existingTargetPath));
+    }
+
+    [Fact]
+    public async Task CommitAsync_WhenRollbackFollowsNestedCreate_DeletesNewlyCreatedEmptyDirectoriesWhilePreservingExistingParents()
+    {
+        var slnDir = Path.Combine(_tempRoot, "RollbackNestedDirsSample");
+        var existingParent = Path.Combine(slnDir, "ExistingParent");
+        var existingEmptyParent = Path.Combine(slnDir, "ExistingEmptyParent");
+        Directory.CreateDirectory(existingParent);
+        Directory.CreateDirectory(existingEmptyParent);
+
+        var keepFile = Path.Combine(existingParent, "Keep.txt");
+        await File.WriteAllTextAsync(keepFile, "keep", new UTF8Encoding(false));
+
+        var nestedDir = Path.Combine(existingParent, "Nested");
+        var deepDir = Path.Combine(nestedDir, "Deep");
+        var siblingDir = Path.Combine(nestedDir, "Sibling");
+        var preEmptySubDir = Path.Combine(existingEmptyParent, "Sub");
+
+        var createdDeepPath = Path.Combine(deepDir, "Created.cs");
+        var createdSiblingPath = Path.Combine(siblingDir, "AlsoCreated.cs");
+        var createdInPreEmptyPath = Path.Combine(preEmptySubDir, "Leaf.cs");
+        var failingCreatePath = Path.Combine(existingParent, "FailsHere.cs");
+
+        var engine = new FailingOnNthWriteDiffEngine(failOnWriteCallNumber: 4);
+        var plan = (await engine.ComputePlanAsync(slnDir,
+        [
+            new StagedFileChange(createdDeepPath, FileChangeKind.Create, "deep"),
+            new StagedFileChange(createdSiblingPath, FileChangeKind.Create, "sibling"),
+            new StagedFileChange(createdInPreEmptyPath, FileChangeKind.Create, "leaf"),
+            new StagedFileChange(failingCreatePath, FileChangeKind.Create, "boom")
+        ])).Value!;
+
+        var commit = await engine.CommitAsync(plan);
+
+        Assert.False(commit.IsSuccess);
+        Assert.Equal(ErrorCodes.IO_ERROR, commit.Error?.Code);
+
+        Assert.False(File.Exists(createdDeepPath));
+        Assert.False(File.Exists(createdSiblingPath));
+        Assert.False(File.Exists(createdInPreEmptyPath));
+        Assert.False(File.Exists(failingCreatePath));
+
+        // Newly created empty directories must be cleaned up
+        Assert.False(Directory.Exists(deepDir));
+        Assert.False(Directory.Exists(siblingDir));
+        Assert.False(Directory.Exists(nestedDir));
+        Assert.False(Directory.Exists(preEmptySubDir));
+
+        // Pre-existing parents (both non-empty and empty) must be preserved
+        Assert.True(Directory.Exists(existingParent));
+        Assert.Equal("keep", await File.ReadAllTextAsync(keepFile));
+        Assert.True(Directory.Exists(existingEmptyParent));
+    }
+
+    [Fact]
+    public async Task EntityService_CustomLfOnlyAutoMapperConfigTemplate_PreservesCrlfInMappingProfile()
+    {
+        var slnSvc = new SolutionService();
+        Assert.True((await slnSvc.CreateAsync(new CreateSolutionRequest(_tempRoot, "CrlfAutoApi", MapperKind.AutoMapper))).IsSuccess);
+        var slnDir = Path.Combine(_tempRoot, "CrlfAutoApi");
+
+        var mappingProfilePath = Path.Combine(slnDir, "CrlfAutoApi", "CrlfAutoApi.Core", "MappingProfile.cs");
+        var existingProfile = await File.ReadAllTextAsync(mappingProfilePath);
+        var crlfProfile = existingProfile.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal);
+        await File.WriteAllTextAsync(mappingProfilePath, crlfProfile, new UTF8Encoding(false));
+
+        var overrideDir = Path.Combine(slnDir, ".mma", "templates", "AutoMapper");
+        Directory.CreateDirectory(overrideDir);
+        var lfConfigTemplate =
+            "CreateMap<{{ entity_name }}, {{ entity_name }}ReadModel>();\n" +
+            "CreateMap<{{ entity_name }}, {{ entity_name }}ModifyModel>();";
+        await File.WriteAllTextAsync(Path.Combine(overrideDir, "Config.scriban"), lfConfigTemplate, new UTF8Encoding(false));
+
+        var services = new ServiceCollection();
+        services.AddMmaCore();
+        await using var provider = services.BuildServiceProvider();
+        var entitySvc = provider.GetRequiredService<IEntityService>();
+
+        var result = await entitySvc.GenerateAsync(new AddEntityRequest(slnDir, "Widget", "int", DryRun: false));
+        Assert.True(result.IsSuccess, result.Error?.Message);
+
+        var updatedProfile = await File.ReadAllTextAsync(mappingProfilePath);
+        Assert.Contains("CreateMap<Widget, WidgetReadModel>();\r\nCreateMap<Widget, WidgetModifyModel>();", updatedProfile, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", updatedProfile.Replace("\r\n", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+    }
+
+    private sealed class ReadCountingDiffEngine : DryRunDiffEngine
+    {
+        public int ReadCount { get; private set; }
+
+        public void ResetReadCount() => ReadCount = 0;
+
+        protected override Task<byte[]> ReadBytesAsync(string fullPath, CancellationToken ct)
+        {
+            ReadCount++;
+            return base.ReadBytesAsync(fullPath, ct);
+        }
+    }
+
     private sealed class FailingOnNthWriteDiffEngine(int failOnWriteCallNumber) : DryRunDiffEngine
     {
         private int _writeCalls;

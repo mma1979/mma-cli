@@ -171,12 +171,24 @@ public class DryRunDiffEngine : IDryRunDiffEngine
             {
                 ct.ThrowIfCancellationRequested();
 
+                if (!Enum.IsDefined(diff.Kind))
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        ErrorCodes.VALIDATION_ERROR,
+                        $"Unsupported file change kind '{diff.Kind}'.");
+                }
+
                 if (diff.Kind is FileChangeKind.Create or FileChangeKind.Modify && diff.NewContent is null)
                 {
                     return OperationResult<GenerationSummary>.Failure(
                         ErrorCodes.VALIDATION_ERROR,
                         $"Planned {diff.Kind} for '{diff.FullPath}' is missing content.");
                 }
+            }
+
+            foreach (var diff in plan.FileChanges)
+            {
+                ct.ThrowIfCancellationRequested();
 
                 if (diff.Kind == FileChangeKind.Create)
                 {
@@ -226,6 +238,9 @@ public class DryRunDiffEngine : IDryRunDiffEngine
 
         // Phase 2: Apply writes sequentially with reverse-order rollback on any error.
         var appliedUndo = new List<(string FullPath, bool ExistedBefore, byte[]? OriginalBytes)>(snapshots.Count);
+        var pathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var seenCreatedDirectories = new HashSet<string>(pathComparer);
+        var createdDirectories = new List<string>();
         var created = new List<string>();
         var modified = new List<string>();
         var deleted = new List<string>();
@@ -239,6 +254,11 @@ public class DryRunDiffEngine : IDryRunDiffEngine
                 switch (diff.Kind)
                 {
                     case FileChangeKind.Create:
+                        RecordNonExistentAncestorDirectories(
+                            diff.FullPath,
+                            pathComparer,
+                            seenCreatedDirectories,
+                            createdDirectories);
                         appliedUndo.Add((diff.FullPath, ExistedBefore: false, OriginalBytes: null));
                         await WriteBytesAsync(
                             diff.FullPath,
@@ -263,6 +283,7 @@ public class DryRunDiffEngine : IDryRunDiffEngine
                         break;
 
                     default:
+                        await RollbackAsync(appliedUndo, createdDirectories).ConfigureAwait(false);
                         return OperationResult<GenerationSummary>.Failure(
                             ErrorCodes.VALIDATION_ERROR,
                             $"Unsupported file change kind '{diff.Kind}'.");
@@ -278,13 +299,13 @@ public class DryRunDiffEngine : IDryRunDiffEngine
         }
         catch (OperationCanceledException)
         {
-            await RollbackAsync(appliedUndo).ConfigureAwait(false);
+            await RollbackAsync(appliedUndo, createdDirectories).ConfigureAwait(false);
             return OperationResult<GenerationSummary>.Failure(ErrorCodes.CANCELLED, "Commit operation was cancelled.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _logger?.LogError(ex, "Mid-batch commit failure; rolling back {Count} change(s).", appliedUndo.Count);
-            await RollbackAsync(appliedUndo).ConfigureAwait(false);
+            await RollbackAsync(appliedUndo, createdDirectories).ConfigureAwait(false);
             return OperationResult<GenerationSummary>.Failure(
                 ErrorCodes.IO_ERROR,
                 $"Failed to commit changes: {ex.Message}",
@@ -315,7 +336,36 @@ public class DryRunDiffEngine : IDryRunDiffEngine
         return Task.CompletedTask;
     }
 
-    private async Task RollbackAsync(List<(string FullPath, bool ExistedBefore, byte[]? OriginalBytes)> appliedUndo)
+    private static void RecordNonExistentAncestorDirectories(
+        string fullPath,
+        StringComparer pathComparer,
+        HashSet<string> seenCreatedDirectories,
+        List<string> createdDirectories)
+    {
+        var pendingDirectories = new Stack<string>();
+        var directory = Path.GetDirectoryName(fullPath);
+
+        while (!string.IsNullOrEmpty(directory)
+               && !pathComparer.Equals(directory, Path.GetPathRoot(directory))
+               && !Directory.Exists(directory))
+        {
+            pendingDirectories.Push(directory);
+            directory = Path.GetDirectoryName(directory);
+        }
+
+        while (pendingDirectories.Count > 0)
+        {
+            var ancestor = pendingDirectories.Pop();
+            if (seenCreatedDirectories.Add(ancestor))
+            {
+                createdDirectories.Add(ancestor);
+            }
+        }
+    }
+
+    private async Task RollbackAsync(
+        List<(string FullPath, bool ExistedBefore, byte[]? OriginalBytes)> appliedUndo,
+        List<string> createdDirectories)
     {
         for (var i = appliedUndo.Count - 1; i >= 0; i--)
         {
@@ -343,6 +393,22 @@ public class DryRunDiffEngine : IDryRunDiffEngine
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 _logger?.LogError(ex, "Failed to roll back file '{FullPath}'.", fullPath);
+            }
+        }
+
+        for (var i = createdDirectories.Count - 1; i >= 0; i--)
+        {
+            var dir = createdDirectories[i];
+            try
+            {
+                if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
+                {
+                    Directory.Delete(dir);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger?.LogError(ex, "Failed to remove newly created empty directory '{Directory}'.", dir);
             }
         }
     }
