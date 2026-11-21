@@ -21,4 +21,8 @@
     <ProjectReference Include="..\Mma.Cli.Core\Mma.Cli.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mma.Cli.Core.Tests" />
+  </ItemGroup>
+
 </Project>

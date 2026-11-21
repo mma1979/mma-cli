@@ -133,10 +133,9 @@ public sealed class MySqlIntrospector : IDatabaseIntrospector
                 builder.Password = parameters.Password;
             }
 
-            if (parameters.TrustServerCertificate)
-            {
-                builder.SslMode = MySqlSslMode.Required;
-            }
+            builder.SslMode = parameters.TrustServerCertificate
+                ? MySqlSslMode.Preferred
+                : MySqlSslMode.VerifyFull;
 
             return OperationResult<string>.Success(builder.ConnectionString);
         }
@@ -165,7 +164,7 @@ public sealed class MySqlIntrospector : IDatabaseIntrospector
             request,
             BuildConnectionString,
             ValidateRawConnectionString,
-            out var secret);
+            out var secrets);
 
         if (!connResult.IsSuccess || connResult.Value is null)
         {
@@ -188,12 +187,12 @@ public sealed class MySqlIntrospector : IDatabaseIntrospector
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException or TimeoutException)
         {
-            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secret);
+            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets);
             _logger?.LogWarning("MySQL connection test failed: {Reason}", redactedMessage);
             return OperationResult.Failure(
                 ErrorCodes.IO_ERROR,
                 $"MySQL connection failed: {redactedMessage}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secret));
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 
@@ -215,7 +214,7 @@ public sealed class MySqlIntrospector : IDatabaseIntrospector
             request,
             BuildConnectionString,
             ValidateRawConnectionString,
-            out var secret);
+            out var secrets);
 
         if (!connResult.IsSuccess || connResult.Value is null)
         {
@@ -302,16 +301,18 @@ public sealed class MySqlIntrospector : IDatabaseIntrospector
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException or TimeoutException)
         {
-            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secret);
+            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets);
             _logger?.LogWarning("MySQL schema introspection failed: {Reason}", redactedMessage);
             return OperationResult<DatabaseSchemaSnapshot>.Failure(
                 ErrorCodes.IO_ERROR,
                 $"MySQL introspection failed: {redactedMessage}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secret));
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 
-    private static OperationResult<string> ValidateRawConnectionString(string rawConnectionString)
+    private static OperationResult<string> ValidateRawConnectionString(
+        string rawConnectionString,
+        IReadOnlyList<string> secrets)
     {
         try
         {
@@ -323,6 +324,13 @@ public sealed class MySqlIntrospector : IDatabaseIntrospector
                     "MySQL connection string must specify a Server.");
             }
 
+            if (string.IsNullOrWhiteSpace(builder.Database))
+            {
+                return OperationResult<string>.Failure(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "MySQL connection string must specify a Database.");
+            }
+
             builder.AllowUserVariables = false;
             return OperationResult<string>.Success(builder.ConnectionString);
         }
@@ -330,8 +338,8 @@ public sealed class MySqlIntrospector : IDatabaseIntrospector
         {
             return OperationResult<string>.Failure(
                 ErrorCodes.VALIDATION_ERROR,
-                $"Invalid MySQL connection string: {DatabaseIntrospectionHelper.RedactSecrets(ex.Message)}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex));
+                $"Invalid MySQL connection string: {DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets)}",
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 }

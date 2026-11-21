@@ -201,7 +201,7 @@ public sealed class SqlServerIntrospector : IDatabaseIntrospector
             request,
             BuildConnectionString,
             ValidateRawConnectionString,
-            out var secret);
+            out var secrets);
 
         if (!connResult.IsSuccess || connResult.Value is null)
         {
@@ -224,12 +224,12 @@ public sealed class SqlServerIntrospector : IDatabaseIntrospector
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException or TimeoutException)
         {
-            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secret);
+            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets);
             _logger?.LogWarning("SQL Server connection test failed: {Reason}", redactedMessage);
             return OperationResult.Failure(
                 ErrorCodes.IO_ERROR,
                 $"SQL Server connection failed: {redactedMessage}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secret));
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 
@@ -251,7 +251,7 @@ public sealed class SqlServerIntrospector : IDatabaseIntrospector
             request,
             BuildConnectionString,
             ValidateRawConnectionString,
-            out var secret);
+            out var secrets);
 
         if (!connResult.IsSuccess || connResult.Value is null)
         {
@@ -330,16 +330,18 @@ public sealed class SqlServerIntrospector : IDatabaseIntrospector
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException or TimeoutException)
         {
-            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secret);
+            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets);
             _logger?.LogWarning("SQL Server schema introspection failed: {Reason}", redactedMessage);
             return OperationResult<DatabaseSchemaSnapshot>.Failure(
                 ErrorCodes.IO_ERROR,
                 $"SQL Server introspection failed: {redactedMessage}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secret));
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 
-    private static OperationResult<string> ValidateRawConnectionString(string rawConnectionString)
+    private static OperationResult<string> ValidateRawConnectionString(
+        string rawConnectionString,
+        IReadOnlyList<string> secrets)
     {
         try
         {
@@ -357,8 +359,8 @@ public sealed class SqlServerIntrospector : IDatabaseIntrospector
         {
             return OperationResult<string>.Failure(
                 ErrorCodes.VALIDATION_ERROR,
-                $"Invalid SQL Server connection string: {DatabaseIntrospectionHelper.RedactSecrets(ex.Message)}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex));
+                $"Invalid SQL Server connection string: {DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets)}",
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 }

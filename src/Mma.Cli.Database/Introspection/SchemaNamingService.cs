@@ -132,6 +132,11 @@ public sealed partial class SchemaNamingService
             stripped = baseUnsigned;
         }
 
+        if (provider == DatabaseProviderKind.SqlServer && stripped is "timestamp" or "rowversion")
+        {
+            return "byte[]";
+        }
+
         return stripped switch
         {
             "uniqueidentifier" or "uuid" or "guid" => "Guid",

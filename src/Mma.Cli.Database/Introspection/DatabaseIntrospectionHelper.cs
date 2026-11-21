@@ -31,62 +31,95 @@ internal static partial class DatabaseIntrospectionHelper
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SecretPairRegex();
 
-    public static string? ExtractSecret(DatabaseIntrospectRequest request)
+    [GeneratedRegex(
+        @"(?<prefix>[a-zA-Z][a-zA-Z0-9+.-]*://[^/:@\s]+:)(?<secret>[^/\s?#;'""]+)(?<suffix>@)",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex SecretUriRegex();
+
+    public static IReadOnlyList<string> ExtractSecrets(DatabaseIntrospectRequest request)
     {
-        if (!string.IsNullOrEmpty(request.Parameters?.Password))
+        ArgumentNullException.ThrowIfNull(request);
+
+        var secrets = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        void AddSecret(string? candidate)
         {
-            return request.Parameters.Password;
+            if (!string.IsNullOrEmpty(candidate) && seen.Add(candidate))
+            {
+                secrets.Add(candidate);
+            }
         }
 
-        if (string.IsNullOrWhiteSpace(request.ConnectionString))
+        AddSecret(request.Parameters?.Password);
+
+        if (!string.IsNullOrWhiteSpace(request.ConnectionString))
         {
-            return null;
+            foreach (Match match in SecretPairRegex().Matches(request.ConnectionString))
+            {
+                var val = match.Groups["val"].Value.Trim();
+                if (val.Length >= 2
+                    && ((val[0] == '\'' && val[^1] == '\'') || (val[0] == '"' && val[^1] == '"')))
+                {
+                    val = val[1..^1];
+                }
+
+                AddSecret(val);
+            }
+
+            foreach (Match match in SecretUriRegex().Matches(request.ConnectionString))
+            {
+                AddSecret(match.Groups["secret"].Value);
+            }
         }
 
-        var match = SecretPairRegex().Match(request.ConnectionString);
-        if (!match.Success)
-        {
-            return null;
-        }
-
-        var val = match.Groups["val"].Value.Trim();
-        if (val.Length >= 2
-            && ((val[0] == '\'' && val[^1] == '\'') || (val[0] == '"' && val[^1] == '"')))
-        {
-            val = val[1..^1];
-        }
-
-        return string.IsNullOrEmpty(val) ? null : val;
+        return secrets;
     }
 
-    public static string RedactSecrets(string? text, string? explicitPassword = null)
+    public static string RedactSecrets(string? text, string? explicitPassword = null) =>
+        string.IsNullOrEmpty(explicitPassword)
+            ? RedactSecrets(text, (IReadOnlyList<string>?)null)
+            : RedactSecrets(text, [explicitPassword]);
+
+    public static string RedactSecrets(string? text, IReadOnlyList<string>? explicitSecrets)
     {
         if (string.IsNullOrEmpty(text))
         {
             return string.Empty;
         }
 
-        var redacted = text;
-        if (!string.IsNullOrEmpty(explicitPassword))
+        var redacted = SecretPairRegex().Replace(text, "${key}***");
+        redacted = SecretUriRegex().Replace(redacted, "${prefix}***${suffix}");
+
+        if (explicitSecrets is { Count: > 0 })
         {
-            redacted = redacted.Replace(explicitPassword, "***", StringComparison.Ordinal);
+            foreach (var secret in explicitSecrets
+                .Where(static s => !string.IsNullOrEmpty(s) && s.Length >= 3)
+                .Distinct(StringComparer.Ordinal)
+                .OrderByDescending(static s => s.Length))
+            {
+                redacted = redacted.Replace(secret, "***", StringComparison.Ordinal);
+            }
         }
 
-        return SecretPairRegex().Replace(redacted, "${key}***");
+        return redacted;
     }
 
     public static string FormatRedactedDetails(Exception ex, string? explicitPassword = null) =>
         $"{ex.GetType().Name}: {RedactSecrets(ex.Message, explicitPassword)}";
 
+    public static string FormatRedactedDetails(Exception ex, IReadOnlyList<string>? explicitSecrets) =>
+        $"{ex.GetType().Name}: {RedactSecrets(ex.Message, explicitSecrets)}";
+
     public static OperationResult<string> ResolveConnectionString(
         DatabaseProviderKind expectedProvider,
         DatabaseIntrospectRequest request,
         Func<DatabaseConnectionParameters, OperationResult<string>> buildFromParameters,
-        Func<string, OperationResult<string>> validateRawConnectionString,
-        out string? secretPassword)
+        Func<string, IReadOnlyList<string>, OperationResult<string>> validateRawConnectionString,
+        out IReadOnlyList<string> secrets)
     {
         ArgumentNullException.ThrowIfNull(request);
-        secretPassword = ExtractSecret(request);
+        secrets = ExtractSecrets(request);
 
         if (request.Provider != expectedProvider)
         {
@@ -97,7 +130,7 @@ internal static partial class DatabaseIntrospectionHelper
 
         if (!string.IsNullOrWhiteSpace(request.ConnectionString))
         {
-            return validateRawConnectionString(request.ConnectionString);
+            return validateRawConnectionString(request.ConnectionString, secrets);
         }
 
         if (request.Parameters is not null)
@@ -147,7 +180,7 @@ internal static partial class DatabaseIntrospectionHelper
 
         var tables = new List<IntrospectedTable>();
         var tableByKey = new Dictionary<TableKey, IntrospectedTable>();
-        var rawColLookupByTable = new Dictionary<TableKey, Dictionary<string, IntrospectedColumn>>();
+        var columnMetaLookup = new Dictionary<ColumnKey, IntrospectedColumn>();
 
         foreach (var group in tableGroups)
         {
@@ -176,7 +209,6 @@ internal static partial class DatabaseIntrospectionHelper
 
             var entityName = ResolveEntityName(schemaName, tableName, effectiveFilters.TableNameOverrides, naming);
             var columns = new List<IntrospectedColumn>();
-            var colByRawName = new Dictionary<string, IntrospectedColumn>(StringComparer.OrdinalIgnoreCase);
             var seenPropNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var rawCol in group)
@@ -206,7 +238,7 @@ internal static partial class DatabaseIntrospectionHelper
                     MaxLength: maxLength);
 
                 columns.Add(introspectedCol);
-                colByRawName.TryAdd(rawCol.ColumnName, introspectedCol);
+                columnMetaLookup.TryAdd(new ColumnKey(schemaName, tableName, rawCol.ColumnName), introspectedCol);
             }
 
             if (columns.Count == 0)
@@ -222,7 +254,7 @@ internal static partial class DatabaseIntrospectionHelper
                 {
                     var promoted = columns[idIdx] with { IsPrimaryKey = true, IsNullable = false };
                     columns[idIdx] = promoted;
-                    colByRawName[promoted.RawName] = promoted;
+                    columnMetaLookup[new ColumnKey(schemaName, tableName, promoted.RawName)] = promoted;
                 }
             }
 
@@ -232,30 +264,25 @@ internal static partial class DatabaseIntrospectionHelper
             var table = new IntrospectedTable(schemaName, tableName, entityName, pkType, columns);
             tables.Add(table);
             tableByKey[group.Key] = table;
-            rawColLookupByTable[group.Key] = colByRawName;
         }
 
         var relations = new List<IntrospectedRelation>();
-        var seenRelations = new HashSet<(string ParentEntity, string ChildEntity, string ForeignKey)>();
+        var seenRelations = new HashSet<RelationKey>();
 
         foreach (var rawRel in rawRelations)
         {
             var parentKey = new TableKey(rawRel.ParentSchema, rawRel.ParentTable);
             var childKey = new TableKey(rawRel.ChildSchema, rawRel.ChildTable);
+            var fkColKey = new ColumnKey(rawRel.ChildSchema, rawRel.ChildTable, rawRel.ForeignKeyColumn);
 
             if (!tableByKey.TryGetValue(parentKey, out var parentTable)
                 || !tableByKey.TryGetValue(childKey, out var childTable)
-                || !rawColLookupByTable.TryGetValue(childKey, out var childCols)
-                || !childCols.TryGetValue(rawRel.ForeignKeyColumn, out var fkColumn))
+                || !columnMetaLookup.TryGetValue(fkColKey, out var fkColumn))
             {
                 continue;
             }
 
-            var dedupeKey = (
-                parentTable.EntityName.ToUpperInvariant(),
-                childTable.EntityName.ToUpperInvariant(),
-                fkColumn.PropertyName.ToUpperInvariant());
-
+            var dedupeKey = new RelationKey(parentKey, childKey, fkColumn.PropertyName);
             if (!seenRelations.Add(dedupeKey))
             {
                 continue;
@@ -327,5 +354,55 @@ internal static partial class DatabaseIntrospectionHelper
             HashCode.Combine(
                 StringComparer.OrdinalIgnoreCase.GetHashCode(SchemaName),
                 StringComparer.OrdinalIgnoreCase.GetHashCode(TableName));
+    }
+
+    private readonly record struct ColumnKey : IEquatable<ColumnKey>
+    {
+        public ColumnKey(string schemaName, string tableName, string columnName)
+        {
+            SchemaName = schemaName ?? string.Empty;
+            TableName = tableName ?? string.Empty;
+            ColumnName = columnName ?? string.Empty;
+        }
+
+        public string SchemaName { get; }
+        public string TableName { get; }
+        public string ColumnName { get; }
+
+        public bool Equals(ColumnKey other) =>
+            string.Equals(SchemaName, other.SchemaName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(TableName, other.TableName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(ColumnName, other.ColumnName, StringComparison.OrdinalIgnoreCase);
+
+        public override int GetHashCode() =>
+            HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(SchemaName),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(TableName),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(ColumnName));
+    }
+
+    private readonly record struct RelationKey : IEquatable<RelationKey>
+    {
+        public RelationKey(TableKey parent, TableKey child, string foreignKey)
+        {
+            Parent = parent;
+            Child = child;
+            ForeignKey = foreignKey ?? string.Empty;
+        }
+
+        public TableKey Parent { get; }
+        public TableKey Child { get; }
+        public string ForeignKey { get; }
+
+        public bool Equals(RelationKey other) =>
+            Parent.Equals(other.Parent)
+            && Child.Equals(other.Child)
+            && string.Equals(ForeignKey, other.ForeignKey, StringComparison.OrdinalIgnoreCase);
+
+        public override int GetHashCode() =>
+            HashCode.Combine(
+                Parent.GetHashCode(),
+                Child.GetHashCode(),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(ForeignKey));
     }
 }

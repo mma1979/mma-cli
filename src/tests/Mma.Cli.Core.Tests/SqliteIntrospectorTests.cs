@@ -414,4 +414,102 @@ public sealed class SqliteIntrospectorTests : IDisposable
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorCodes.CANCELLED, result.Error?.Code);
     }
+
+    [Fact]
+    public async Task IntrospectAsync_HandlesSelfReferencingForeignKeysAndCompositePrimaryKeys()
+    {
+        var dbPath = Path.Combine(_tempRoot, "self-ref-composite.sqlite");
+        var connBuilder = new SqliteConnectionStringBuilder
+        {
+            DataSource = dbPath,
+            Pooling = false
+        };
+
+        await using (var conn = new SqliteConnection(connBuilder.ConnectionString))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                PRAGMA foreign_keys = ON;
+
+                CREATE TABLE Categories (
+                    Id INTEGER PRIMARY KEY,
+                    Name TEXT NOT NULL,
+                    ParentCategoryId INTEGER NULL REFERENCES Categories(Id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE Orders (
+                    Id TEXT PRIMARY KEY,
+                    OrderNumber VARCHAR(30) NOT NULL
+                );
+
+                CREATE TABLE Tags (
+                    Id INTEGER PRIMARY KEY,
+                    Label VARCHAR(50) NOT NULL
+                );
+
+                CREATE TABLE OrderTags (
+                    OrderId TEXT NOT NULL REFERENCES Orders(Id) ON DELETE CASCADE,
+                    TagId INTEGER NOT NULL REFERENCES Tags(Id) ON DELETE CASCADE,
+                    PRIMARY KEY (OrderId, TagId)
+                );
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var introspector = new SqliteIntrospector(new SchemaNamingService());
+        var result = await introspector.IntrospectAsync(new DatabaseIntrospectRequest(
+            DatabaseProviderKind.Sqlite,
+            Parameters: new DatabaseConnectionParameters(dbPath)));
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        var snapshot = result.Value!;
+
+        var category = Assert.Single(snapshot.Tables, t => t.EntityName == "Category");
+        var parentCol = Assert.Single(category.Columns, c => c.PropertyName == "ParentCategoryId");
+        Assert.True(parentCol.IsForeignKey);
+        Assert.False(parentCol.IsPrimaryKey);
+        Assert.True(parentCol.IsNullable);
+        Assert.Equal("int", parentCol.ClrType);
+
+        Assert.Contains(snapshot.Relations, r =>
+            r.ParentEntity == "Category"
+            && r.ChildEntity == "Category"
+            && r.ForeignKey == "ParentCategoryId"
+            && r.ForeignKeyType == "int"
+            && r.DeleteBehavior == "SetNull");
+
+        var orderTag = Assert.Single(snapshot.Tables, t => t.EntityName == "OrderTag");
+        var orderIdCol = Assert.Single(orderTag.Columns, c => c.PropertyName == "OrderId");
+        var tagIdCol = Assert.Single(orderTag.Columns, c => c.PropertyName == "TagId");
+        Assert.True(orderIdCol.IsPrimaryKey);
+        Assert.True(orderIdCol.IsForeignKey);
+        Assert.False(orderIdCol.IsNullable);
+        Assert.Equal("string", orderIdCol.ClrType);
+
+        Assert.True(tagIdCol.IsPrimaryKey);
+        Assert.True(tagIdCol.IsForeignKey);
+        Assert.False(tagIdCol.IsNullable);
+        Assert.Equal("int", tagIdCol.ClrType);
+
+        Assert.Contains(snapshot.Relations, r =>
+            r.ParentEntity == "Order"
+            && r.ChildEntity == "OrderTag"
+            && r.ForeignKey == "OrderId"
+            && r.DeleteBehavior == "Cascade");
+        Assert.Contains(snapshot.Relations, r =>
+            r.ParentEntity == "Tag"
+            && r.ChildEntity == "OrderTag"
+            && r.ForeignKey == "TagId"
+            && r.DeleteBehavior == "Cascade");
+
+        var manifest = snapshot.ToProjectManifest("CompositeApi");
+        var orderTagEntity = Assert.Single(manifest.Entities, e => e.Name == "OrderTag");
+        Assert.Contains(orderTagEntity.Properties, p => p.Name == "OrderId" && p.IsForeignKey && !p.Nullable);
+        Assert.Contains(orderTagEntity.Properties, p => p.Name == "TagId" && p.IsForeignKey && !p.Nullable);
+        Assert.Contains(manifest.Relations, r =>
+            r.ParentEntity == "Category"
+            && r.ChildEntity == "Category"
+            && r.ForeignKey == "ParentCategoryId");
+    }
 }

@@ -26,6 +26,8 @@ public sealed class PostgresIntrospector : IDatabaseIntrospector
                     ON tc.constraint_catalog = kcu.constraint_catalog
                    AND tc.constraint_schema = kcu.constraint_schema
                    AND tc.constraint_name = kcu.constraint_name
+                   AND tc.table_schema = kcu.table_schema
+                   AND tc.table_name = kcu.table_name
                 WHERE tc.constraint_type = 'PRIMARY KEY'
                   AND tc.table_schema = c.table_schema
                   AND tc.table_name = c.table_name
@@ -38,6 +40,8 @@ public sealed class PostgresIntrospector : IDatabaseIntrospector
                     ON tc.constraint_catalog = kcu.constraint_catalog
                    AND tc.constraint_schema = kcu.constraint_schema
                    AND tc.constraint_name = kcu.constraint_name
+                   AND tc.table_schema = kcu.table_schema
+                   AND tc.table_name = kcu.table_name
                 WHERE tc.constraint_type = 'FOREIGN KEY'
                   AND tc.table_schema = c.table_schema
                   AND tc.table_name = c.table_name
@@ -69,6 +73,8 @@ public sealed class PostgresIntrospector : IDatabaseIntrospector
             ON tc.constraint_catalog = kcu.constraint_catalog
            AND tc.constraint_schema = kcu.constraint_schema
            AND tc.constraint_name = kcu.constraint_name
+           AND tc.table_schema = kcu.table_schema
+           AND tc.table_name = kcu.table_name
         INNER JOIN information_schema.referential_constraints AS rc
             ON tc.constraint_catalog = rc.constraint_catalog
            AND tc.constraint_schema = rc.constraint_schema
@@ -144,10 +150,9 @@ public sealed class PostgresIntrospector : IDatabaseIntrospector
                 builder.Password = parameters.Password;
             }
 
-            if (parameters.TrustServerCertificate)
-            {
-                builder.SslMode = SslMode.Require;
-            }
+            builder.SslMode = parameters.TrustServerCertificate
+                ? SslMode.Prefer
+                : SslMode.VerifyFull;
 
             return OperationResult<string>.Success(builder.ConnectionString);
         }
@@ -176,7 +181,7 @@ public sealed class PostgresIntrospector : IDatabaseIntrospector
             request,
             BuildConnectionString,
             ValidateRawConnectionString,
-            out var secret);
+            out var secrets);
 
         if (!connResult.IsSuccess || connResult.Value is null)
         {
@@ -199,12 +204,12 @@ public sealed class PostgresIntrospector : IDatabaseIntrospector
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException or TimeoutException)
         {
-            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secret);
+            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets);
             _logger?.LogWarning("PostgreSQL connection test failed: {Reason}", redactedMessage);
             return OperationResult.Failure(
                 ErrorCodes.IO_ERROR,
                 $"PostgreSQL connection failed: {redactedMessage}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secret));
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 
@@ -226,7 +231,7 @@ public sealed class PostgresIntrospector : IDatabaseIntrospector
             request,
             BuildConnectionString,
             ValidateRawConnectionString,
-            out var secret);
+            out var secrets);
 
         if (!connResult.IsSuccess || connResult.Value is null)
         {
@@ -305,16 +310,18 @@ public sealed class PostgresIntrospector : IDatabaseIntrospector
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException or TimeoutException)
         {
-            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secret);
+            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets);
             _logger?.LogWarning("PostgreSQL schema introspection failed: {Reason}", redactedMessage);
             return OperationResult<DatabaseSchemaSnapshot>.Failure(
                 ErrorCodes.IO_ERROR,
                 $"PostgreSQL introspection failed: {redactedMessage}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secret));
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 
-    private static OperationResult<string> ValidateRawConnectionString(string rawConnectionString)
+    private static OperationResult<string> ValidateRawConnectionString(
+        string rawConnectionString,
+        IReadOnlyList<string> secrets)
     {
         try
         {
@@ -332,8 +339,8 @@ public sealed class PostgresIntrospector : IDatabaseIntrospector
         {
             return OperationResult<string>.Failure(
                 ErrorCodes.VALIDATION_ERROR,
-                $"Invalid PostgreSQL connection string: {DatabaseIntrospectionHelper.RedactSecrets(ex.Message)}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex));
+                $"Invalid PostgreSQL connection string: {DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets)}",
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 }

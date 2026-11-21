@@ -111,6 +111,23 @@ public sealed class SqlServerAuthMappingTests
     }
 
     [Fact]
+    public void PostgresQueries_JoinTableConstraintsOnTableSchemaAndTableName()
+    {
+        var columnsSubquerySplit = PostgresIntrospector.ColumnsSqlQuery.Split(
+            "tc.table_schema = kcu.table_schema",
+            StringSplitOptions.None);
+        Assert.Equal(3, columnsSubquerySplit.Length); // 2 EXISTS subqueries (PK + FK)
+
+        var columnsTableSplit = PostgresIntrospector.ColumnsSqlQuery.Split(
+            "tc.table_name = kcu.table_name",
+            StringSplitOptions.None);
+        Assert.Equal(3, columnsTableSplit.Length);
+
+        Assert.Contains("tc.table_schema = kcu.table_schema", PostgresIntrospector.RelationsSqlQuery, StringComparison.Ordinal);
+        Assert.Contains("tc.table_name = kcu.table_name", PostgresIntrospector.RelationsSqlQuery, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PostgresBuildConnectionString_ValidAndInvalidParameters_BehavesSafely()
     {
         var introspector = new PostgresIntrospector(_naming);
@@ -127,6 +144,17 @@ public sealed class SqlServerAuthMappingTests
         Assert.Equal("appdb", parsed.Database);
         Assert.Equal("pguser", parsed.Username);
         Assert.Equal("PgSecret!Password", parsed.Password);
+        Assert.Equal(SslMode.VerifyFull, parsed.SslMode);
+
+        var trusted = introspector.BuildConnectionString(new DatabaseConnectionParameters(
+            ServerOrPath: "pg.internal",
+            Database: "appdb",
+            Username: "pguser",
+            Password: "PgSecret!Password",
+            TrustServerCertificate: true));
+        Assert.True(trusted.IsSuccess, trusted.Error?.Message);
+        var parsedTrusted = new NpgsqlConnectionStringBuilder(trusted.Value!);
+        Assert.Equal(SslMode.Prefer, parsedTrusted.SslMode);
 
         var bad = introspector.BuildConnectionString(new DatabaseConnectionParameters(
             ServerOrPath: "",
@@ -156,6 +184,17 @@ public sealed class SqlServerAuthMappingTests
         Assert.Equal("myuser", parsed.UserID);
         Assert.Equal("MySqlSecret!Password", parsed.Password);
         Assert.False(parsed.AllowUserVariables);
+        Assert.Equal(MySqlSslMode.VerifyFull, parsed.SslMode);
+
+        var trusted = introspector.BuildConnectionString(new DatabaseConnectionParameters(
+            ServerOrPath: "mysql.internal",
+            Database: "shopdb",
+            Username: "myuser",
+            Password: "MySqlSecret!Password",
+            TrustServerCertificate: true));
+        Assert.True(trusted.IsSuccess, trusted.Error?.Message);
+        var parsedTrusted = new MySqlConnectionStringBuilder(trusted.Value!);
+        Assert.Equal(MySqlSslMode.Preferred, parsedTrusted.SslMode);
 
         var bad = introspector.BuildConnectionString(new DatabaseConnectionParameters(
             ServerOrPath: "mysql.internal",
@@ -165,6 +204,24 @@ public sealed class SqlServerAuthMappingTests
         Assert.Equal(ErrorCodes.VALIDATION_ERROR, bad.Error?.Code);
         Assert.DoesNotContain("MySqlSecret!Password", bad.Error?.Message ?? string.Empty, StringComparison.Ordinal);
         Assert.DoesNotContain("MySqlSecret!Password", bad.Error?.Details ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MySqlIntrospectAsync_RawConnectionStringWithoutDatabase_ReturnsValidationError()
+    {
+        const string secret = "MySqlMissingDbSecret!";
+        var logger = new RecordingLogger<MySqlIntrospector>();
+        var mysql = new MySqlIntrospector(_naming, logger);
+
+        var res = await mysql.IntrospectAsync(new DatabaseIntrospectRequest(
+            DatabaseProviderKind.MySql,
+            ConnectionString: $"Server=127.0.0.1;Port=1;Uid=root;Pwd={secret}"));
+
+        Assert.False(res.IsSuccess);
+        Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error?.Code);
+        Assert.DoesNotContain(secret, res.Error?.Message ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, res.Error?.Details ?? string.Empty, StringComparison.Ordinal);
+        Assert.All(logger.Entries, e => Assert.DoesNotContain(secret, e.Message, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -284,6 +341,11 @@ public sealed class SqlServerAuthMappingTests
     [InlineData(DatabaseProviderKind.Sqlite, "float", "float")]
     [InlineData(DatabaseProviderKind.SqlServer, "datetime2(7)", "DateTime")]
     [InlineData(DatabaseProviderKind.SqlServer, "datetimeoffset", "DateTime")]
+    [InlineData(DatabaseProviderKind.SqlServer, "timestamp", "byte[]")]
+    [InlineData(DatabaseProviderKind.SqlServer, "rowversion", "byte[]")]
+    [InlineData(DatabaseProviderKind.PostgreSql, "timestamp", "DateTime")]
+    [InlineData(DatabaseProviderKind.MySql, "timestamp", "DateTime")]
+    [InlineData(DatabaseProviderKind.Sqlite, "timestamp", "DateTime")]
     [InlineData(DatabaseProviderKind.PostgreSql, "timestamp with time zone", "DateTime")]
     [InlineData(DatabaseProviderKind.PostgreSql, "timestamp(6) with time zone", "DateTime")]
     [InlineData(DatabaseProviderKind.MySql, "date", "DateTime")]
@@ -342,6 +404,160 @@ public sealed class SqlServerAuthMappingTests
             Assert.Null(entry.Exception);
             Assert.DoesNotContain(secret, entry.Message, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public async Task Introspectors_UriCredentialsAndMultiKeySecrets_NeverLeakInErrorsOrLogs()
+    {
+        const string uriSecret = "UltraSecretP@ss";
+        const string pgUri = $"postgresql://pguser:{uriSecret}@db.local:5432/app";
+        const string myUri = $"mysql://myuser:{uriSecret}@db.local/shop";
+
+        var pgLogger = new RecordingLogger<PostgresIntrospector>();
+        var postgres = new PostgresIntrospector(_naming, pgLogger);
+
+        // Raw URI rejected inside ValidateRawConnectionString
+        var pgRawRes = await postgres.TestConnectionAsync(new DatabaseIntrospectRequest(
+            DatabaseProviderKind.PostgreSql,
+            ConnectionString: pgUri));
+        Assert.False(pgRawRes.IsSuccess);
+        Assert.DoesNotContain(uriSecret, pgRawRes.Error?.Message ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain(uriSecret, pgRawRes.Error?.Details ?? string.Empty, StringComparison.Ordinal);
+        Assert.All(pgLogger.Entries, e =>
+        {
+            Assert.Null(e.Exception);
+            Assert.DoesNotContain(uriSecret, e.Message, StringComparison.Ordinal);
+        });
+
+        // URI embedded in Host triggers DbException + ILogger warning path
+        var pgHostRes = await postgres.IntrospectAsync(new DatabaseIntrospectRequest(
+            DatabaseProviderKind.PostgreSql,
+            ConnectionString: $"Host={pgUri};Database=app;Timeout=1"));
+        Assert.False(pgHostRes.IsSuccess);
+        Assert.DoesNotContain(uriSecret, pgHostRes.Error?.Message ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain(uriSecret, pgHostRes.Error?.Details ?? string.Empty, StringComparison.Ordinal);
+        Assert.All(pgLogger.Entries, e =>
+        {
+            Assert.Null(e.Exception);
+            Assert.DoesNotContain(uriSecret, e.Message, StringComparison.Ordinal);
+        });
+
+        var myLogger = new RecordingLogger<MySqlIntrospector>();
+        var mysql = new MySqlIntrospector(_naming, myLogger);
+
+        var myRawRes = await mysql.TestConnectionAsync(new DatabaseIntrospectRequest(
+            DatabaseProviderKind.MySql,
+            ConnectionString: myUri));
+        Assert.False(myRawRes.IsSuccess);
+        Assert.DoesNotContain(uriSecret, myRawRes.Error?.Message ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain(uriSecret, myRawRes.Error?.Details ?? string.Empty, StringComparison.Ordinal);
+        Assert.All(myLogger.Entries, e =>
+        {
+            Assert.Null(e.Exception);
+            Assert.DoesNotContain(uriSecret, e.Message, StringComparison.Ordinal);
+        });
+
+        // Multi-key connection string where Password follows Token
+        const string multiConnStr = "Token=abc;Password=RealSecret!";
+        var sqlLogger = new RecordingLogger<SqlServerIntrospector>();
+        var sqlServer = new SqlServerIntrospector(_naming, sqlLogger);
+        var sqlMultiRes = await sqlServer.TestConnectionAsync(new DatabaseIntrospectRequest(
+            DatabaseProviderKind.SqlServer,
+            ConnectionString: multiConnStr));
+        Assert.False(sqlMultiRes.IsSuccess);
+        Assert.DoesNotContain("RealSecret!", sqlMultiRes.Error?.Message ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain("RealSecret!", sqlMultiRes.Error?.Details ?? string.Empty, StringComparison.Ordinal);
+        Assert.All(sqlLogger.Entries, e =>
+        {
+            Assert.Null(e.Exception);
+            Assert.DoesNotContain("RealSecret!", e.Message, StringComparison.Ordinal);
+        });
+
+        // Verify SecretUriRegex and ExtractSecrets handle '@' inside URI password and multi-key strings
+        var pgExtracted = DatabaseIntrospectionHelper.ExtractSecrets(new DatabaseIntrospectRequest(
+            DatabaseProviderKind.PostgreSql,
+            ConnectionString: pgUri));
+        Assert.Equal([uriSecret], pgExtracted);
+
+        var myExtracted = DatabaseIntrospectionHelper.ExtractSecrets(new DatabaseIntrospectRequest(
+            DatabaseProviderKind.MySql,
+            ConnectionString: myUri));
+        Assert.Equal([uriSecret], myExtracted);
+
+        var multiExtracted = DatabaseIntrospectionHelper.ExtractSecrets(new DatabaseIntrospectRequest(
+            DatabaseProviderKind.SqlServer,
+            ConnectionString: multiConnStr));
+        Assert.Equal(["abc", "RealSecret!"], multiExtracted);
+
+        var redactedUriLine = DatabaseIntrospectionHelper.RedactSecrets(
+            $"Failed for {pgUri} and {myUri}; contact ops@db.local",
+            pgExtracted);
+        Assert.Equal("Failed for postgresql://pguser:***@db.local:5432/app and mysql://myuser:***@db.local/shop; contact ops@db.local", redactedUriLine);
+
+        var redactedMultiDetails = DatabaseIntrospectionHelper.FormatRedactedDetails(
+            new ArgumentException($"Bad {multiConnStr} with token value abc and raw RealSecret!"),
+            multiExtracted);
+        Assert.DoesNotContain("abc", redactedMultiDetails, StringComparison.Ordinal);
+        Assert.DoesNotContain("RealSecret!", redactedMultiDetails, StringComparison.Ordinal);
+
+        // Verify short 1-2 char tokens do not corrupt unrelated prose while key=value and URI forms still mask
+        var shortTokenProse = await postgres.TestConnectionAsync(new DatabaseIntrospectRequest(
+            DatabaseProviderKind.PostgreSql,
+            ConnectionString: "Host=127.0.0.1;Port=1;Database=nope;Password=a;Timeout=1"));
+        Assert.False(shortTokenProse.IsSuccess);
+        Assert.Contains("failed", shortTokenProse.Error?.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("f***iled", shortTokenProse.Error?.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        var shortKv = DatabaseIntrospectionHelper.RedactSecrets(
+            "Failed database call with Password=a;Token=bb;",
+            new[] { "a", "bb" });
+        Assert.Equal("Failed database call with Password=***;Token=***;", shortKv);
+
+        var shortUri = DatabaseIntrospectionHelper.RedactSecrets(
+            "Failed database call to postgresql://pguser:xy@db.local:5432/app",
+            new[] { "xy" });
+        Assert.Equal("Failed database call to postgresql://pguser:***@db.local:5432/app", shortUri);
+    }
+
+    [Fact]
+    public void DatabaseIntrospectionHelper_BuildSnapshot_DisambiguatesMultiSchemaTablesAndRelations()
+    {
+        var rawColumns = new List<RawColumnMetadata>
+        {
+            new("sales", "Customers", "Id", "int", IsPrimaryKey: true, IsNullable: false, IsForeignKey: false),
+            new("sales", "Customers", "Name", "nvarchar(100)", IsPrimaryKey: false, IsNullable: false, IsForeignKey: false),
+            new("sales", "Orders", "Id", "int", IsPrimaryKey: true, IsNullable: false, IsForeignKey: false),
+            new("sales", "Orders", "CustomerId", "int", IsPrimaryKey: false, IsNullable: false, IsForeignKey: true),
+
+            new("archive", "Customers", "Id", "uuid", IsPrimaryKey: true, IsNullable: false, IsForeignKey: false),
+            new("archive", "Customers", "Name", "varchar(100)", IsPrimaryKey: false, IsNullable: false, IsForeignKey: false),
+            new("archive", "Orders", "Id", "uuid", IsPrimaryKey: true, IsNullable: false, IsForeignKey: false),
+            new("archive", "Orders", "CustomerId", "uuid", IsPrimaryKey: false, IsNullable: false, IsForeignKey: true)
+        };
+
+        var rawRelations = new List<RawRelationMetadata>
+        {
+            new("FK_sales_orders_customer", "sales", "Customers", "sales", "Orders", "CustomerId", "int", "CASCADE"),
+            new("FK_archive_orders_customer", "archive", "Customers", "archive", "Orders", "CustomerId", "uuid", "RESTRICT")
+        };
+
+        var snapshot = DatabaseIntrospectionHelper.BuildSnapshot(
+            DatabaseProviderKind.PostgreSql,
+            rawColumns,
+            rawRelations,
+            filters: null,
+            _naming);
+
+        Assert.Equal(4, snapshot.Tables.Count);
+        var salesOrders = Assert.Single(snapshot.Tables, t => t.SchemaName == "sales" && t.TableName == "Orders");
+        var archiveOrders = Assert.Single(snapshot.Tables, t => t.SchemaName == "archive" && t.TableName == "Orders");
+        Assert.Equal("int", Assert.Single(salesOrders.Columns, c => c.PropertyName == "CustomerId").ClrType);
+        Assert.Equal("Guid", Assert.Single(archiveOrders.Columns, c => c.PropertyName == "CustomerId").ClrType);
+
+        // Both cross-schema relations share EntityName ("Customer" -> "Order", FK "CustomerId") and MUST both survive
+        Assert.Equal(2, snapshot.Relations.Count);
+        Assert.Contains(snapshot.Relations, r => r.ForeignKeyType == "int" && r.DeleteBehavior == "Cascade");
+        Assert.Contains(snapshot.Relations, r => r.ForeignKeyType == "Guid" && r.DeleteBehavior == "Restrict");
     }
 
     private sealed class RecordingLogger<T> : ILogger<T>

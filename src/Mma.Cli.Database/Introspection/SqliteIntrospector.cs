@@ -88,7 +88,7 @@ public sealed class SqliteIntrospector : IDatabaseIntrospector
                 openResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to open SQLite database."));
         }
 
-        var secret = DatabaseIntrospectionHelper.ExtractSecret(request);
+        var secrets = DatabaseIntrospectionHelper.ExtractSecrets(request);
         try
         {
             await using var connection = openResult.Value;
@@ -103,12 +103,12 @@ public sealed class SqliteIntrospector : IDatabaseIntrospector
         }
         catch (Exception ex) when (ex is SqliteException or IOException or InvalidOperationException)
         {
-            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secret);
+            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets);
             _logger?.LogWarning("SQLite connection test failed: {Reason}", redactedMessage);
             return OperationResult.Failure(
                 ErrorCodes.IO_ERROR,
                 $"SQLite connection failed: {redactedMessage}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secret));
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 
@@ -132,7 +132,7 @@ public sealed class SqliteIntrospector : IDatabaseIntrospector
                 openResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to open SQLite database."));
         }
 
-        var secret = DatabaseIntrospectionHelper.ExtractSecret(request);
+        var secrets = DatabaseIntrospectionHelper.ExtractSecrets(request);
         try
         {
             await using var connection = openResult.Value;
@@ -184,12 +184,12 @@ public sealed class SqliteIntrospector : IDatabaseIntrospector
         }
         catch (Exception ex) when (ex is SqliteException or IOException or InvalidOperationException)
         {
-            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secret);
+            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets);
             _logger?.LogWarning("SQLite schema introspection failed: {Reason}", redactedMessage);
             return OperationResult<DatabaseSchemaSnapshot>.Failure(
                 ErrorCodes.IO_ERROR,
                 $"SQLite introspection failed: {redactedMessage}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secret));
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 
@@ -202,7 +202,7 @@ public sealed class SqliteIntrospector : IDatabaseIntrospector
             request,
             BuildConnectionString,
             ValidateRawConnectionString,
-            out var secret);
+            out var secrets);
 
         if (!connResult.IsSuccess || connResult.Value is null)
         {
@@ -220,7 +220,7 @@ public sealed class SqliteIntrospector : IDatabaseIntrospector
             return OperationResult<SqliteConnection>.Failure(
                 ErrorCodes.VALIDATION_ERROR,
                 "Invalid SQLite connection string.",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secret));
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
 
         if (!IsInMemoryBuilder(builder))
@@ -235,7 +235,7 @@ public sealed class SqliteIntrospector : IDatabaseIntrospector
                 return OperationResult<SqliteConnection>.Failure(
                     ErrorCodes.VALIDATION_ERROR,
                     "Invalid SQLite database file path.",
-                    DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secret));
+                    DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
             }
 
             if (!File.Exists(fullPath))
@@ -266,16 +266,18 @@ public sealed class SqliteIntrospector : IDatabaseIntrospector
         catch (Exception ex) when (ex is SqliteException or IOException or InvalidOperationException)
         {
             await connection.DisposeAsync().ConfigureAwait(false);
-            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secret);
+            var redactedMessage = DatabaseIntrospectionHelper.RedactSecrets(ex.Message, secrets);
             _logger?.LogWarning("Failed to open SQLite database: {Reason}", redactedMessage);
             return OperationResult<SqliteConnection>.Failure(
                 ErrorCodes.IO_ERROR,
                 $"Unable to open SQLite database: {redactedMessage}",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secret));
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 
-    private static OperationResult<string> ValidateRawConnectionString(string rawConnectionString)
+    private static OperationResult<string> ValidateRawConnectionString(
+        string rawConnectionString,
+        IReadOnlyList<string> secrets)
     {
         try
         {
@@ -294,7 +296,7 @@ public sealed class SqliteIntrospector : IDatabaseIntrospector
             return OperationResult<string>.Failure(
                 ErrorCodes.VALIDATION_ERROR,
                 "Invalid SQLite connection string.",
-                DatabaseIntrospectionHelper.FormatRedactedDetails(ex));
+                DatabaseIntrospectionHelper.FormatRedactedDetails(ex, secrets));
         }
     }
 
