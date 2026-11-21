@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.Extensions.Logging;
 using Mma.Cli.Core.CodeGen;
 using Mma.Cli.Core.Contracts;
@@ -6,6 +5,7 @@ using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Events;
 using Mma.Cli.Core.Manifest;
 using Mma.Cli.Core.Results;
+using Mma.Cli.Core.Roslyn;
 using Mma.Cli.Core.Solutions;
 using Mma.Cli.Core.Templates;
 
@@ -166,32 +166,13 @@ public sealed class EntityService : IEntityService
 
             var modifiedEntries = new List<(string Path, string Content)>();
 
-            var (dbContextLines, dbContextNewLine, dbContextTrailingNewline) =
-                await ReadLinesPreservingFormatAsync(dbContextPath, ct).ConfigureAwait(false);
-
-            var dbSetIdx = dbContextLines.FindLastIndex(l => l.Contains("public virtual DbSet<", StringComparison.Ordinal));
-            if (dbSetIdx < 0)
-            {
-                return OperationResult<GenerationSummary>.Failure(
-                    ErrorCodes.TEMPLATE_ERROR,
-                    $"Could not locate DbSet anchor in '{dbContextPath}'.");
-            }
+            var dbContextText = await ServiceFileHelper.ReadUtf8TextAsync(dbContextPath, ct).ConfigureAwait(false);
 
             var dbSetRendered = _templateRenderer.RenderTemplate(info.SolutionPath, mapper, "DbSetEntry", templateModel);
             if (!dbSetRendered.IsSuccess || dbSetRendered.Value is null)
             {
                 return OperationResult<GenerationSummary>.Failure(
                     dbSetRendered.Error ?? new GenerationError(ErrorCodes.TEMPLATE_ERROR, "Failed to render 'DbSetEntry'."));
-            }
-
-            dbContextLines.Insert(dbSetIdx + 1, dbSetRendered.Value);
-
-            var configIdx = dbContextLines.FindLastIndex(l => l.Contains("modelBuilder.ApplyConfiguration(new", StringComparison.Ordinal));
-            if (configIdx < 0)
-            {
-                return OperationResult<GenerationSummary>.Failure(
-                    ErrorCodes.TEMPLATE_ERROR,
-                    $"Could not locate ApplyConfiguration anchor in '{dbContextPath}'.");
             }
 
             var configEntryRendered = _templateRenderer.RenderTemplate(info.SolutionPath, mapper, "ConfigEntry", templateModel);
@@ -201,21 +182,24 @@ public sealed class EntityService : IEntityService
                     configEntryRendered.Error ?? new GenerationError(ErrorCodes.TEMPLATE_ERROR, "Failed to render 'ConfigEntry'."));
             }
 
-            dbContextLines.Insert(configIdx + 1, configEntryRendered.Value);
-            modifiedEntries.Add((dbContextPath, JoinLinesPreservingFormat(dbContextLines, dbContextNewLine, dbContextTrailingNewline)));
+            var dbContextRewriter = new DbContextSyntaxRewriter();
+            var dbContextUpdated = dbContextRewriter.RegisterEntityInDbContext(
+                dbContextText,
+                entityName,
+                entitySetName,
+                dbSetRendered.Value,
+                configEntryRendered.Value);
+            if (!dbContextUpdated.IsSuccess || dbContextUpdated.Value is null)
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    dbContextUpdated.Error ?? new GenerationError(ErrorCodes.TEMPLATE_ERROR, $"Failed to update '{dbContextPath}'."));
+            }
+
+            modifiedEntries.Add((dbContextPath, dbContextUpdated.Value));
 
             if (mapper == MapperKind.AutoMapper)
             {
-                var (profileLines, profileNewLine, profileTrailingNewline) =
-                    await ReadLinesPreservingFormatAsync(mappingProfilePath, ct).ConfigureAwait(false);
-
-                var lastSemicolonIdx = profileLines.FindLastIndex(l => l.EndsWith(";", StringComparison.Ordinal));
-                if (lastSemicolonIdx < 0)
-                {
-                    return OperationResult<GenerationSummary>.Failure(
-                        ErrorCodes.TEMPLATE_ERROR,
-                        $"Could not locate mapping registration anchor in '{mappingProfilePath}'.");
-                }
+                var profileText = await ServiceFileHelper.ReadUtf8TextAsync(mappingProfilePath, ct).ConfigureAwait(false);
 
                 var autoMapperConfigRendered = _templateRenderer.RenderTemplate(info.SolutionPath, mapper, "Config", templateModel);
                 if (!autoMapperConfigRendered.IsSuccess || autoMapperConfigRendered.Value is null)
@@ -224,11 +208,17 @@ public sealed class EntityService : IEntityService
                         autoMapperConfigRendered.Error ?? new GenerationError(ErrorCodes.TEMPLATE_ERROR, "Failed to render 'Config'."));
                 }
 
-                var normalizedConfig = autoMapperConfigRendered.Value
-                    .Replace("\r\n", "\n", StringComparison.Ordinal)
-                    .Replace("\n", profileNewLine, StringComparison.Ordinal);
-                profileLines.Insert(lastSemicolonIdx + 1, normalizedConfig);
-                modifiedEntries.Add((mappingProfilePath, JoinLinesPreservingFormat(profileLines, profileNewLine, profileTrailingNewline)));
+                var profileUpdated = dbContextRewriter.RegisterEntityInMappingProfile(
+                    profileText,
+                    entityName,
+                    autoMapperConfigRendered.Value);
+                if (!profileUpdated.IsSuccess || profileUpdated.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(
+                        profileUpdated.Error ?? new GenerationError(ErrorCodes.TEMPLATE_ERROR, $"Failed to update '{mappingProfilePath}'."));
+                }
+
+                modifiedEntries.Add((mappingProfilePath, profileUpdated.Value));
             }
 
             var stagedChanges = new List<StagedFileChange>(createdEntries.Count + modifiedEntries.Count);
@@ -352,37 +342,5 @@ public sealed class EntityService : IEntityService
                 await lockHandle.DisposeAsync().ConfigureAwait(false);
             }
         }
-    }
-
-    private static async Task<(List<string> Lines, string NewLine, bool HasTrailingNewline)> ReadLinesPreservingFormatAsync(
-        string path,
-        CancellationToken ct)
-    {
-        var bytes = await ServiceFileHelper.ReadFileBytesSharedAsync(path, ct).ConfigureAwait(false);
-        var text = Encoding.UTF8.GetString(ServiceFileHelper.StripUtf8Bom(bytes).Span);
-        var newLine = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        var hasTrailingNewline = text.EndsWith('\n');
-        var normalized = text.Replace("\r\n", "\n", StringComparison.Ordinal);
-        if (hasTrailingNewline)
-        {
-            normalized = normalized[..^1];
-        }
-
-        var lines = normalized.Length == 0 && !hasTrailingNewline
-            ? []
-            : normalized.Split('\n').ToList();
-
-        return (lines, newLine, hasTrailingNewline);
-    }
-
-    private static string JoinLinesPreservingFormat(IReadOnlyList<string> lines, string newLine, bool hasTrailingNewline)
-    {
-        if (lines.Count == 0)
-        {
-            return hasTrailingNewline ? newLine : string.Empty;
-        }
-
-        var joined = string.Join(newLine, lines);
-        return hasTrailingNewline ? joined + newLine : joined;
     }
 }

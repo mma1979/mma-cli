@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Logging;
+using Mma.Cli.Core.CodeGen;
 using Mma.Cli.Core.Contracts;
 using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Events;
 using Mma.Cli.Core.Manifest;
 using Mma.Cli.Core.Results;
+using Mma.Cli.Core.Roslyn;
 using Mma.Cli.Core.Solutions;
 
 namespace Mma.Cli.Core.Services;
@@ -14,12 +16,14 @@ public sealed class PropertyService : IPropertyService
     private readonly ILogger<PropertyService>? _logger;
     private readonly ISolutionLockManager _lockManager;
     private readonly IManifestStore _manifestStore;
+    private readonly IDryRunDiffEngine _diffEngine;
 
     public PropertyService(
         ISolutionLocator solutionLocator,
         ILogger<PropertyService>? logger = null,
         ISolutionLockManager? lockManager = null,
-        IManifestStore? manifestStore = null)
+        IManifestStore? manifestStore = null,
+        IDryRunDiffEngine? diffEngine = null)
     {
         ArgumentNullException.ThrowIfNull(solutionLocator);
 
@@ -27,6 +31,7 @@ public sealed class PropertyService : IPropertyService
         _logger = logger;
         _lockManager = lockManager ?? new SolutionLockManager();
         _manifestStore = manifestStore ?? new ManifestStore(_lockManager, solutionLocator);
+        _diffEngine = diffEngine ?? new DryRunDiffEngine();
     }
 
     public async Task<OperationResult<GenerationSummary>> ApplyAsync(
@@ -106,22 +111,30 @@ public sealed class PropertyService : IPropertyService
                     $"Entity '{entityName}' or its models could not be found in '{info.ProjectsPath}'.");
             }
 
-            var nullableSuffix = request.Nullable ? "?" : string.Empty;
-            var dtoProperty = $"public {normalizedType}{nullableSuffix} {propertyName} {{get; set;}}";
-            var entityProperty = $"public {normalizedType}{nullableSuffix} {propertyName} {{get; private set;}}";
-            var assignment = $"{propertyName} = dto.{propertyName};";
+            var modifyModelText = await ServiceFileHelper.ReadUtf8TextAsync(modifyModelPath, ct).ConfigureAwait(false);
+            var readModelText = await ServiceFileHelper.ReadUtf8TextAsync(readModelPath, ct).ConfigureAwait(false);
+            var entityText = await ServiceFileHelper.ReadUtf8TextAsync(entityPath, ct).ConfigureAwait(false);
+
+            foreach (var (path, text) in new[] { (modifyModelPath, modifyModelText), (readModelPath, readModelText), (entityPath, entityText) })
+            {
+                var syntaxCheck = RoslynSyntaxHelper.ParseAndValidate(text, path);
+                if (!syntaxCheck.IsSuccess)
+                {
+                    return OperationResult<GenerationSummary>.Failure(syntaxCheck.Error!);
+                }
+            }
+
+            var modelRewriter = new ModelSyntaxRewriter();
+            var entityRewriter = new EntitySyntaxRewriter();
+            var configRewriter = new EntityConfigSyntaxRewriter();
+
             var configLine = BuildConfigLine(normalizedType, propertyName);
-
-            var modifyLines = await ServiceFileHelper.ReadLinesAsync(modifyModelPath, ct).ConfigureAwait(false);
-            var readLines = await ServiceFileHelper.ReadLinesAsync(readModelPath, ct).ConfigureAwait(false);
-            var entityLines = await ServiceFileHelper.ReadLinesAsync(entityPath, ct).ConfigureAwait(false);
-
-            var pendingWrites = new List<(string Path, List<string> Lines)>();
+            var stagedChanges = new List<StagedFileChange>();
 
             if (request.Remove)
             {
-                var propExists = ServiceFileHelper.HasPropertyNamed(entityLines, propertyName)
-                                 || ServiceFileHelper.HasPropertyNamed(modifyLines, propertyName);
+                var propExists = entityRewriter.HasProperty(entityText, propertyName)
+                                 || modelRewriter.HasProperty(modifyModelText, propertyName);
                 if (!propExists)
                 {
                     return OperationResult<GenerationSummary>.Failure(
@@ -129,31 +142,47 @@ public sealed class PropertyService : IPropertyService
                         $"Property '{propertyName}' was not found on entity '{entityName}'.");
                 }
 
-                ServiceFileHelper.RemovePropertyNamed(modifyLines, propertyName);
-                ServiceFileHelper.RemovePropertyNamed(readLines, propertyName);
-                ServiceFileHelper.RemovePropertyNamed(entityLines, propertyName);
-                ServiceFileHelper.RemoveLineContaining(entityLines, assignment);
-                ServiceFileHelper.RemoveLineContaining(entityLines, assignment);
+                var updatedModify = modelRewriter.RemoveProperty(modifyModelText, propertyName);
+                if (!updatedModify.IsSuccess || updatedModify.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(updatedModify.Error!);
+                }
 
-                pendingWrites.Add((modifyModelPath, modifyLines));
-                pendingWrites.Add((readModelPath, readLines));
-                pendingWrites.Add((entityPath, entityLines));
+                var updatedRead = modelRewriter.RemoveProperty(readModelText, propertyName);
+                if (!updatedRead.IsSuccess || updatedRead.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(updatedRead.Error!);
+                }
+
+                var updatedEntity = entityRewriter.RemovePropertyAndAssignments(entityText, propertyName);
+                if (!updatedEntity.IsSuccess || updatedEntity.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(updatedEntity.Error!);
+                }
+
+                stagedChanges.Add(new StagedFileChange(modifyModelPath, FileChangeKind.Modify, updatedModify.Value));
+                stagedChanges.Add(new StagedFileChange(readModelPath, FileChangeKind.Modify, updatedRead.Value));
+                stagedChanges.Add(new StagedFileChange(entityPath, FileChangeKind.Modify, updatedEntity.Value));
 
                 if (File.Exists(entityConfigPath))
                 {
-                    var configLines = await ServiceFileHelper.ReadLinesAsync(entityConfigPath, ct).ConfigureAwait(false);
-                    var removedConfig = (!string.IsNullOrEmpty(configLine) && ServiceFileHelper.RemoveLineContaining(configLines, configLine))
-                                        || ServiceFileHelper.RemoveLineContaining(configLines, $"builder.Property(e => e.{propertyName})");
-                    if (removedConfig)
+                    var configText = await ServiceFileHelper.ReadUtf8TextAsync(entityConfigPath, ct).ConfigureAwait(false);
+                    var updatedConfig = configRewriter.RemovePropertyConfiguration(configText, propertyName);
+                    if (!updatedConfig.IsSuccess || updatedConfig.Value is null)
                     {
-                        pendingWrites.Add((entityConfigPath, configLines));
+                        return OperationResult<GenerationSummary>.Failure(updatedConfig.Error!);
+                    }
+
+                    if (!string.Equals(updatedConfig.Value, configText, StringComparison.Ordinal))
+                    {
+                        stagedChanges.Add(new StagedFileChange(entityConfigPath, FileChangeKind.Modify, updatedConfig.Value));
                     }
                 }
             }
             else
             {
-                var duplicate = ServiceFileHelper.HasPropertyNamed(entityLines, propertyName)
-                                || ServiceFileHelper.HasPropertyNamed(modifyLines, propertyName);
+                var duplicate = entityRewriter.HasProperty(entityText, propertyName)
+                                || modelRewriter.HasProperty(modifyModelText, propertyName);
                 if (duplicate)
                 {
                     return OperationResult<GenerationSummary>.Failure(
@@ -161,38 +190,64 @@ public sealed class PropertyService : IPropertyService
                         $"Property '{propertyName}' already exists on entity '{entityName}'.");
                 }
 
-                ServiceFileHelper.InsertBeforeClosingBraces(modifyLines, dtoProperty);
-                ServiceFileHelper.InsertBeforeClosingBraces(readLines, dtoProperty);
-
-                var validatorFieldIdx = entityLines.FindIndex(l => l.Contains($"{entityName}Validator _Validator;", StringComparison.Ordinal));
-                if (validatorFieldIdx < 1)
+                var updatedModify = modelRewriter.AddProperty(modifyModelText, propertyName, normalizedType, isNullable: request.Nullable);
+                if (!updatedModify.IsSuccess || updatedModify.Value is null)
                 {
-                    return OperationResult<GenerationSummary>.Failure(
-                        ErrorCodes.TEMPLATE_ERROR,
-                        $"Could not locate validator anchor in '{entityPath}'.");
+                    return OperationResult<GenerationSummary>.Failure(updatedModify.Error!);
                 }
-                entityLines.Insert(validatorFieldIdx - 1, entityProperty);
 
-                ServiceFileHelper.InsertAtAnchorOffset(entityLines, $"public {entityName}(", 10, assignment);
-                ServiceFileHelper.InsertAtAnchorOffset(entityLines, $"public {entityName} Update(", 10, assignment);
+                var updatedRead = modelRewriter.AddProperty(readModelText, propertyName, normalizedType, isNullable: request.Nullable);
+                if (!updatedRead.IsSuccess || updatedRead.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(updatedRead.Error!);
+                }
 
-                pendingWrites.Add((modifyModelPath, modifyLines));
-                pendingWrites.Add((readModelPath, readLines));
-                pendingWrites.Add((entityPath, entityLines));
+                var entityWithProp = entityRewriter.AddProperty(
+                    entityText,
+                    entityName,
+                    propertyName,
+                    normalizedType,
+                    isNullable: request.Nullable,
+                    isVirtual: false,
+                    isPrivateSetter: true);
+                if (!entityWithProp.IsSuccess || entityWithProp.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(entityWithProp.Error!);
+                }
+
+                var assignment = $"{propertyName} = dto.{propertyName};";
+                var entityWithAssign = entityRewriter.AddConstructorAndUpdateAssignment(entityWithProp.Value, entityName, assignment);
+                if (!entityWithAssign.IsSuccess || entityWithAssign.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(entityWithAssign.Error!);
+                }
+
+                stagedChanges.Add(new StagedFileChange(modifyModelPath, FileChangeKind.Modify, updatedModify.Value));
+                stagedChanges.Add(new StagedFileChange(readModelPath, FileChangeKind.Modify, updatedRead.Value));
+                stagedChanges.Add(new StagedFileChange(entityPath, FileChangeKind.Modify, entityWithAssign.Value));
 
                 if (!string.IsNullOrEmpty(configLine) && File.Exists(entityConfigPath))
                 {
-                    var configLines = await ServiceFileHelper.ReadLinesAsync(entityConfigPath, ct).ConfigureAwait(false);
-                    if (!ServiceFileHelper.TryInsertAfterEntityConfigAnchor(configLines, configLine))
+                    var configText = await ServiceFileHelper.ReadUtf8TextAsync(entityConfigPath, ct).ConfigureAwait(false);
+                    var updatedConfig = configRewriter.AddConfigurationStatement(configText, configLine);
+                    if (!updatedConfig.IsSuccess || updatedConfig.Value is null)
                     {
-                        return OperationResult<GenerationSummary>.Failure(
-                            ErrorCodes.TEMPLATE_ERROR,
-                            $"Could not locate configuration anchor in '{entityConfigPath}'.");
+                        return OperationResult<GenerationSummary>.Failure(updatedConfig.Error!);
                     }
 
-                    pendingWrites.Add((entityConfigPath, configLines));
+                    stagedChanges.Add(new StagedFileChange(entityConfigPath, FileChangeKind.Modify, updatedConfig.Value));
                 }
             }
+
+            var planResult = await _diffEngine.ComputePlanAsync(info.SolutionPath, stagedChanges, ct).ConfigureAwait(false);
+            if (!planResult.IsSuccess || planResult.Value is null)
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    planResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to compute generation plan."));
+            }
+
+            var plan = planResult.Value;
+            var modifiedPaths = stagedChanges.Select(c => c.FullPath).ToArray();
 
             if (!request.DryRun)
             {
@@ -204,10 +259,15 @@ public sealed class PropertyService : IPropertyService
                         loadError ?? new GenerationError(ErrorCodes.MANIFEST_INVALID, "Failed to load manifest."));
                 }
 
-                foreach (var (path, lines) in pendingWrites)
+                var commitResult = await _diffEngine.CommitAsync(plan, ct).ConfigureAwait(false);
+                if (!commitResult.IsSuccess || commitResult.Value is null)
                 {
-                    ct.ThrowIfCancellationRequested();
-                    await ServiceFileHelper.WriteLinesAsync(path, lines, ct).ConfigureAwait(false);
+                    return OperationResult<GenerationSummary>.Failure(
+                        commitResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to commit property changes."));
+                }
+
+                foreach (var path in modifiedPaths)
+                {
                     ServiceFileHelper.Report(progress, GenerationStage.Updating, $"Updated {Path.GetFileName(path)}", path);
                 }
 
@@ -257,9 +317,10 @@ public sealed class PropertyService : IPropertyService
 
             return OperationResult<GenerationSummary>.Success(new GenerationSummary(
                 Array.Empty<string>(),
-                pendingWrites.Select(w => w.Path).ToArray(),
+                modifiedPaths,
                 Array.Empty<string>(),
-                request.DryRun));
+                request.DryRun,
+                Plan: plan));
         }
         catch (OperationCanceledException)
         {

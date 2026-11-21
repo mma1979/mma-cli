@@ -1,10 +1,11 @@
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using Mma.Cli.Core.CodeGen;
 using Mma.Cli.Core.Contracts;
 using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Events;
 using Mma.Cli.Core.Manifest;
 using Mma.Cli.Core.Results;
+using Mma.Cli.Core.Roslyn;
 using Mma.Cli.Core.Solutions;
 
 namespace Mma.Cli.Core.Services;
@@ -15,12 +16,14 @@ public sealed class RelationService : IRelationService
     private readonly ILogger<RelationService>? _logger;
     private readonly ISolutionLockManager _lockManager;
     private readonly IManifestStore _manifestStore;
+    private readonly IDryRunDiffEngine _diffEngine;
 
     public RelationService(
         ISolutionLocator solutionLocator,
         ILogger<RelationService>? logger = null,
         ISolutionLockManager? lockManager = null,
-        IManifestStore? manifestStore = null)
+        IManifestStore? manifestStore = null,
+        IDryRunDiffEngine? diffEngine = null)
     {
         ArgumentNullException.ThrowIfNull(solutionLocator);
 
@@ -28,6 +31,7 @@ public sealed class RelationService : IRelationService
         _logger = logger;
         _lockManager = lockManager ?? new SolutionLockManager();
         _manifestStore = manifestStore ?? new ManifestStore(_lockManager, solutionLocator);
+        _diffEngine = diffEngine ?? new DryRunDiffEngine();
     }
 
     public async Task<OperationResult<GenerationSummary>> ApplyAsync(
@@ -120,29 +124,45 @@ public sealed class RelationService : IRelationService
                     $"Parent entity '{parentEntity}' or child entity '{childEntity}' files could not be found.");
             }
 
-            var parentDtoNav = BuildRelationProperty(false, true, $"List<{childEntity}>", childrenSetName);
-            var childDtoNav = BuildRelationProperty(false, true, parentEntity, parentEntity);
-            var childDtoFk = BuildRelationProperty(false, false, normalizedFkType, foreignKey);
-            var parentEntityNav = BuildRelationProperty(false, true, $"ICollection<{childEntity}>", childrenSetName);
-            var parentEntityAssign = $"{childrenSetName} ??= new List<{childEntity}>();";
-            var childEntityNav = BuildRelationProperty(true, true, parentEntity, parentEntity);
-            var childEntityFk = BuildRelationProperty(true, false, normalizedFkType, foreignKey);
-            var childEntityAssign = $"{foreignKey} = dto.{foreignKey};";
-            var parentConfigPrefix =
-                $"builder.HasMany(e => e.{childrenSetName}).WithOne(e => e.{parentEntity}).HasForeignKey(e => e.{foreignKey})";
-            var parentConfigLine = $"{parentConfigPrefix}.OnDelete(DeleteBehavior.Cascade);";
+            var parentModifyText = await ServiceFileHelper.ReadUtf8TextAsync(parentModifyModelPath, ct).ConfigureAwait(false);
+            var childModifyText = await ServiceFileHelper.ReadUtf8TextAsync(childModifyModelPath, ct).ConfigureAwait(false);
+            var childReadText = await ServiceFileHelper.ReadUtf8TextAsync(childReadModelPath, ct).ConfigureAwait(false);
+            var parentEntityText = await ServiceFileHelper.ReadUtf8TextAsync(parentEntityPath, ct).ConfigureAwait(false);
+            var childEntityText = await ServiceFileHelper.ReadUtf8TextAsync(childEntityPath, ct).ConfigureAwait(false);
+            var parentConfigText = await ServiceFileHelper.ReadUtf8TextAsync(parentConfigPath, ct).ConfigureAwait(false);
 
-            var parentModifyLines = await ServiceFileHelper.ReadLinesAsync(parentModifyModelPath, ct).ConfigureAwait(false);
-            var childModifyLines = await ServiceFileHelper.ReadLinesAsync(childModifyModelPath, ct).ConfigureAwait(false);
-            var childReadLines = await ServiceFileHelper.ReadLinesAsync(childReadModelPath, ct).ConfigureAwait(false);
-            var parentEntityLines = await ServiceFileHelper.ReadLinesAsync(parentEntityPath, ct).ConfigureAwait(false);
-            var childEntityLines = await ServiceFileHelper.ReadLinesAsync(childEntityPath, ct).ConfigureAwait(false);
-            var parentConfigLines = await ServiceFileHelper.ReadLinesAsync(parentConfigPath, ct).ConfigureAwait(false);
+            foreach (var (path, text) in new[]
+            {
+                (parentModifyModelPath, parentModifyText),
+                (childModifyModelPath, childModifyText),
+                (childReadModelPath, childReadText),
+                (parentEntityPath, parentEntityText),
+                (childEntityPath, childEntityText),
+                (parentConfigPath, parentConfigText)
+            })
+            {
+                var syntaxCheck = RoslynSyntaxHelper.ParseAndValidate(text, path);
+                if (!syntaxCheck.IsSuccess)
+                {
+                    return OperationResult<GenerationSummary>.Failure(syntaxCheck.Error!);
+                }
+            }
+
+            var modelRewriter = new ModelSyntaxRewriter();
+            var entityRewriter = new EntitySyntaxRewriter();
+            var configRewriter = new EntityConfigSyntaxRewriter();
+
+            string updatedParentModify;
+            string updatedChildModify;
+            string updatedChildRead;
+            string updatedParentEntity;
+            string updatedChildEntity;
+            string updatedParentConfig;
 
             if (request.Remove)
             {
-                var relationExists = parentConfigLines.Any(l => l.Contains(parentConfigPrefix, StringComparison.Ordinal))
-                                     || ServiceFileHelper.HasPropertyNamed(childEntityLines, foreignKey);
+                var relationExists = configRewriter.HasRelationConfiguration(parentConfigText, childrenSetName, parentEntity, foreignKey)
+                                     || entityRewriter.HasProperty(childEntityText, foreignKey);
                 if (!relationExists)
                 {
                     return OperationResult<GenerationSummary>.Failure(
@@ -150,100 +170,225 @@ public sealed class RelationService : IRelationService
                         $"Relation '{parentEntity} -> {childEntity}' via '{foreignKey}' was not found.");
                 }
 
-                RemoveVirtualProperty(parentModifyLines, $"List<{childEntity}>", childrenSetName);
-                ServiceFileHelper.RemovePropertyNamed(childModifyLines, foreignKey);
-                RemoveVirtualProperty(childModifyLines, parentEntity, parentEntity);
-                ServiceFileHelper.RemovePropertyNamed(childReadLines, foreignKey);
+                var parentModifyResult = modelRewriter.RemoveProperty(parentModifyText, childrenSetName, requireVirtual: true);
+                if (!parentModifyResult.IsSuccess || parentModifyResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(parentModifyResult.Error!);
+                }
+                updatedParentModify = parentModifyResult.Value;
 
-                RemoveVirtualProperty(parentEntityLines, $"ICollection<{childEntity}>", childrenSetName);
-                ServiceFileHelper.RemoveLineContaining(parentEntityLines, parentEntityAssign);
-                ServiceFileHelper.RemoveLineContaining(parentEntityLines, parentEntityAssign);
+                var childModifyFkResult = modelRewriter.RemoveProperty(childModifyText, foreignKey);
+                if (!childModifyFkResult.IsSuccess || childModifyFkResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(childModifyFkResult.Error!);
+                }
 
-                ServiceFileHelper.RemovePropertyNamed(childEntityLines, foreignKey);
-                RemoveVirtualProperty(childEntityLines, parentEntity, parentEntity);
-                ServiceFileHelper.RemoveLineContaining(childEntityLines, childEntityAssign);
-                ServiceFileHelper.RemoveLineContaining(childEntityLines, childEntityAssign);
+                var childModifyNavResult = modelRewriter.RemoveProperty(childModifyFkResult.Value, parentEntity, requireVirtual: true);
+                if (!childModifyNavResult.IsSuccess || childModifyNavResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(childModifyNavResult.Error!);
+                }
+                updatedChildModify = childModifyNavResult.Value;
 
-                ServiceFileHelper.RemoveLineContaining(parentConfigLines, parentConfigPrefix);
+                var childReadResult = modelRewriter.RemoveProperty(childReadText, foreignKey);
+                if (!childReadResult.IsSuccess || childReadResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(childReadResult.Error!);
+                }
+                updatedChildRead = childReadResult.Value;
+
+                var parentEntityResult = entityRewriter.RemovePropertyAndAssignments(parentEntityText, childrenSetName);
+                if (!parentEntityResult.IsSuccess || parentEntityResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(parentEntityResult.Error!);
+                }
+                updatedParentEntity = parentEntityResult.Value;
+
+                var childEntityFkResult = entityRewriter.RemovePropertyAndAssignments(childEntityText, foreignKey);
+                if (!childEntityFkResult.IsSuccess || childEntityFkResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(childEntityFkResult.Error!);
+                }
+
+                var childEntityNavResult = entityRewriter.RemovePropertyAndAssignments(childEntityFkResult.Value, parentEntity);
+                if (!childEntityNavResult.IsSuccess || childEntityNavResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(childEntityNavResult.Error!);
+                }
+                updatedChildEntity = childEntityNavResult.Value;
+
+                var parentConfigResult = configRewriter.RemoveRelationConfiguration(parentConfigText, childrenSetName, parentEntity, foreignKey);
+                if (!parentConfigResult.IsSuccess || parentConfigResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(parentConfigResult.Error!);
+                }
+                updatedParentConfig = parentConfigResult.Value;
             }
             else
             {
-                if (parentConfigLines.Any(l => l.Contains(parentConfigPrefix, StringComparison.Ordinal)))
+                if (configRewriter.HasRelationConfiguration(parentConfigText, childrenSetName, parentEntity, foreignKey))
                 {
                     return OperationResult<GenerationSummary>.Failure(
                         ErrorCodes.RELATION_EXISTS,
                         $"Relation '{parentEntity} -> {childEntity}' via '{foreignKey}' already exists.");
                 }
 
-                if (ServiceFileHelper.HasPropertyNamed(childEntityLines, foreignKey)
-                    || ServiceFileHelper.HasPropertyNamed(childModifyLines, foreignKey)
-                    || ServiceFileHelper.HasPropertyNamed(childReadLines, foreignKey))
+                if (entityRewriter.HasProperty(childEntityText, foreignKey)
+                    || modelRewriter.HasProperty(childModifyText, foreignKey)
+                    || modelRewriter.HasProperty(childReadText, foreignKey))
                 {
                     return OperationResult<GenerationSummary>.Failure(
                         ErrorCodes.PROPERTY_EXISTS,
                         $"Property '{foreignKey}' already exists on entity '{childEntity}'.");
                 }
 
-                if (ServiceFileHelper.HasPropertyNamed(childEntityLines, parentEntity)
-                    || ServiceFileHelper.HasPropertyNamed(childModifyLines, parentEntity)
-                    || ServiceFileHelper.HasPropertyNamed(parentEntityLines, childrenSetName)
-                    || ServiceFileHelper.HasPropertyNamed(parentModifyLines, childrenSetName))
+                if (entityRewriter.HasProperty(childEntityText, parentEntity)
+                    || modelRewriter.HasProperty(childModifyText, parentEntity)
+                    || entityRewriter.HasProperty(parentEntityText, childrenSetName)
+                    || modelRewriter.HasProperty(parentModifyText, childrenSetName))
                 {
                     return OperationResult<GenerationSummary>.Failure(
                         ErrorCodes.PROPERTY_EXISTS,
                         $"Navigation property for '{parentEntity} -> {childEntity}' already exists.");
                 }
 
-                ServiceFileHelper.InsertBeforeClosingBraces(parentModifyLines, parentDtoNav);
-
-                var childModifyIdx = Math.Max(0, childModifyLines.Count - 2);
-                childModifyLines.Insert(childModifyIdx, childDtoNav);
-                childModifyLines.Insert(childModifyIdx, childDtoFk);
-
-                ServiceFileHelper.InsertBeforeClosingBraces(childReadLines, childDtoFk);
-
-                var parentValidatorIdx = parentEntityLines.FindIndex(l => l.Contains($"{parentEntity}Validator _Validator;", StringComparison.Ordinal));
-                if (parentValidatorIdx < 1)
+                var parentModifyResult = modelRewriter.AddProperty(
+                    parentModifyText,
+                    childrenSetName,
+                    $"List<{childEntity}>",
+                    isNullable: true,
+                    isVirtual: true);
+                if (!parentModifyResult.IsSuccess || parentModifyResult.Value is null)
                 {
-                    return OperationResult<GenerationSummary>.Failure(
-                        ErrorCodes.TEMPLATE_ERROR,
-                        $"Could not locate validator anchor in '{parentEntityPath}'.");
+                    return OperationResult<GenerationSummary>.Failure(parentModifyResult.Error!);
                 }
-                parentEntityLines.Insert(parentValidatorIdx - 1, parentEntityNav);
+                updatedParentModify = parentModifyResult.Value;
 
-                ServiceFileHelper.InsertAtAnchorOffset(parentEntityLines, $"public {parentEntity}(", 10, parentEntityAssign);
-                ServiceFileHelper.InsertAtAnchorOffset(parentEntityLines, $"public {parentEntity} Update(", 10, parentEntityAssign);
-
-                var childValidatorIdx = childEntityLines.FindIndex(l => l.Contains($"{childEntity}Validator _Validator;", StringComparison.Ordinal));
-                if (childValidatorIdx < 1)
+                var childModifyFkResult = modelRewriter.AddProperty(
+                    childModifyText,
+                    foreignKey,
+                    normalizedFkType,
+                    isNullable: true,
+                    isVirtual: false);
+                if (!childModifyFkResult.IsSuccess || childModifyFkResult.Value is null)
                 {
-                    return OperationResult<GenerationSummary>.Failure(
-                        ErrorCodes.TEMPLATE_ERROR,
-                        $"Could not locate validator anchor in '{childEntityPath}'.");
+                    return OperationResult<GenerationSummary>.Failure(childModifyFkResult.Error!);
                 }
-                childEntityLines.Insert(childValidatorIdx - 1, childEntityNav);
-                childEntityLines.Insert(childValidatorIdx - 1, childEntityFk);
 
-                ServiceFileHelper.InsertAtAnchorOffset(childEntityLines, $"public {childEntity}(", 10, childEntityAssign);
-                ServiceFileHelper.InsertAtAnchorOffset(childEntityLines, $"public {childEntity} Update(", 10, childEntityAssign);
-
-                if (!ServiceFileHelper.TryInsertAfterEntityConfigAnchor(parentConfigLines, parentConfigLine))
+                var childModifyNavResult = modelRewriter.AddProperty(
+                    childModifyFkResult.Value,
+                    parentEntity,
+                    parentEntity,
+                    isNullable: true,
+                    isVirtual: true);
+                if (!childModifyNavResult.IsSuccess || childModifyNavResult.Value is null)
                 {
-                    return OperationResult<GenerationSummary>.Failure(
-                        ErrorCodes.TEMPLATE_ERROR,
-                        $"Could not locate configuration anchor in '{parentConfigPath}'.");
+                    return OperationResult<GenerationSummary>.Failure(childModifyNavResult.Error!);
                 }
+                updatedChildModify = childModifyNavResult.Value;
+
+                var childReadResult = modelRewriter.AddProperty(
+                    childReadText,
+                    foreignKey,
+                    normalizedFkType,
+                    isNullable: true,
+                    isVirtual: false);
+                if (!childReadResult.IsSuccess || childReadResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(childReadResult.Error!);
+                }
+                updatedChildRead = childReadResult.Value;
+
+                var parentEntityPropResult = entityRewriter.AddProperty(
+                    parentEntityText,
+                    parentEntity,
+                    childrenSetName,
+                    $"ICollection<{childEntity}>",
+                    isNullable: true,
+                    isVirtual: true,
+                    isPrivateSetter: false);
+                if (!parentEntityPropResult.IsSuccess || parentEntityPropResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(parentEntityPropResult.Error!);
+                }
+
+                var parentEntityAssign = $"{childrenSetName} ??= new List<{childEntity}>();";
+                var parentEntityAssignResult = entityRewriter.AddConstructorAndUpdateAssignment(
+                    parentEntityPropResult.Value,
+                    parentEntity,
+                    parentEntityAssign);
+                if (!parentEntityAssignResult.IsSuccess || parentEntityAssignResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(parentEntityAssignResult.Error!);
+                }
+                updatedParentEntity = parentEntityAssignResult.Value;
+
+                var childEntityFkResult = entityRewriter.AddProperty(
+                    childEntityText,
+                    childEntity,
+                    foreignKey,
+                    normalizedFkType,
+                    isNullable: true,
+                    isVirtual: false,
+                    isPrivateSetter: true);
+                if (!childEntityFkResult.IsSuccess || childEntityFkResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(childEntityFkResult.Error!);
+                }
+
+                var childEntityNavResult = entityRewriter.AddProperty(
+                    childEntityFkResult.Value,
+                    childEntity,
+                    parentEntity,
+                    parentEntity,
+                    isNullable: true,
+                    isVirtual: true,
+                    isPrivateSetter: true);
+                if (!childEntityNavResult.IsSuccess || childEntityNavResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(childEntityNavResult.Error!);
+                }
+
+                var childEntityAssign = $"{foreignKey} = dto.{foreignKey};";
+                var childEntityAssignResult = entityRewriter.AddConstructorAndUpdateAssignment(
+                    childEntityNavResult.Value,
+                    childEntity,
+                    childEntityAssign);
+                if (!childEntityAssignResult.IsSuccess || childEntityAssignResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(childEntityAssignResult.Error!);
+                }
+                updatedChildEntity = childEntityAssignResult.Value;
+
+                var parentConfigLine =
+                    $"builder.HasMany(e => e.{childrenSetName}).WithOne(e => e.{parentEntity}).HasForeignKey(e => e.{foreignKey}).OnDelete(DeleteBehavior.Cascade);";
+                var parentConfigResult = configRewriter.AddConfigurationStatement(parentConfigText, parentConfigLine);
+                if (!parentConfigResult.IsSuccess || parentConfigResult.Value is null)
+                {
+                    return OperationResult<GenerationSummary>.Failure(parentConfigResult.Error!);
+                }
+                updatedParentConfig = parentConfigResult.Value;
             }
 
-            var pendingWrites = new List<(string Path, List<string> Lines)>
+            var stagedChanges = new List<StagedFileChange>
             {
-                (parentModifyModelPath, parentModifyLines),
-                (childModifyModelPath, childModifyLines),
-                (childReadModelPath, childReadLines),
-                (parentEntityPath, parentEntityLines),
-                (childEntityPath, childEntityLines),
-                (parentConfigPath, parentConfigLines)
+                new(parentModifyModelPath, FileChangeKind.Modify, updatedParentModify),
+                new(childModifyModelPath, FileChangeKind.Modify, updatedChildModify),
+                new(childReadModelPath, FileChangeKind.Modify, updatedChildRead),
+                new(parentEntityPath, FileChangeKind.Modify, updatedParentEntity),
+                new(childEntityPath, FileChangeKind.Modify, updatedChildEntity),
+                new(parentConfigPath, FileChangeKind.Modify, updatedParentConfig)
             };
+
+            var planResult = await _diffEngine.ComputePlanAsync(info.SolutionPath, stagedChanges, ct).ConfigureAwait(false);
+            if (!planResult.IsSuccess || planResult.Value is null)
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    planResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to compute generation plan."));
+            }
+
+            var plan = planResult.Value;
+            var modifiedPaths = stagedChanges.Select(c => c.FullPath).ToArray();
 
             if (!request.DryRun)
             {
@@ -255,10 +400,15 @@ public sealed class RelationService : IRelationService
                         loadError ?? new GenerationError(ErrorCodes.MANIFEST_INVALID, "Failed to load manifest."));
                 }
 
-                foreach (var (path, lines) in pendingWrites)
+                var commitResult = await _diffEngine.CommitAsync(plan, ct).ConfigureAwait(false);
+                if (!commitResult.IsSuccess || commitResult.Value is null)
                 {
-                    ct.ThrowIfCancellationRequested();
-                    await ServiceFileHelper.WriteLinesAsync(path, lines, ct).ConfigureAwait(false);
+                    return OperationResult<GenerationSummary>.Failure(
+                        commitResult.Error ?? new GenerationError(ErrorCodes.IO_ERROR, "Failed to commit relation changes."));
+                }
+
+                foreach (var path in modifiedPaths)
+                {
                     ServiceFileHelper.Report(progress, GenerationStage.Updating, $"Updated {Path.GetFileName(path)}", path);
                 }
 
@@ -339,9 +489,10 @@ public sealed class RelationService : IRelationService
 
             return OperationResult<GenerationSummary>.Success(new GenerationSummary(
                 Array.Empty<string>(),
-                pendingWrites.Select(w => w.Path).ToArray(),
+                modifiedPaths,
                 Array.Empty<string>(),
-                request.DryRun));
+                request.DryRun,
+                Plan: plan));
         }
         catch (OperationCanceledException)
         {
@@ -370,18 +521,5 @@ public sealed class RelationService : IRelationService
                 await lockHandle.DisposeAsync().ConfigureAwait(false);
             }
         }
-    }
-
-    private static string BuildRelationProperty(bool isPrivateSet, bool isVirtual, string type, string name)
-    {
-        var modifier = isPrivateSet ? "private " : string.Empty;
-        var virtualized = isVirtual ? "virtual " : string.Empty;
-        return $"public {virtualized}{type}? {name} {{get; {modifier}set;}}";
-    }
-
-    private static bool RemoveVirtualProperty(List<string> lines, string type, string name)
-    {
-        var pattern = $@"^\s*public\s+virtual\s+{Regex.Escape(type)}\??\s+{Regex.Escape(name)}\s*\{{\s*(?:get|init)\b";
-        return ServiceFileHelper.RemoveLineMatching(lines, l => Regex.IsMatch(l, pattern, RegexOptions.CultureInvariant));
     }
 }
