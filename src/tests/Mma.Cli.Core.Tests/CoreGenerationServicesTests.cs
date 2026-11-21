@@ -4,6 +4,7 @@ using Mma.Cli.Core.Contracts;
 using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Events;
 using Mma.Cli.Core.Export;
+using Mma.Cli.Core.Manifest;
 using Mma.Cli.Core.Process;
 using Mma.Cli.Core.Results;
 using Mma.Cli.Core.Services;
@@ -554,6 +555,198 @@ public sealed class CoreGenerationServicesTests : IDisposable
 
         var overridden = provider.GetTemplate(_tempRoot, MapperKind.AutoMapper, "Entity");
         Assert.Equal("// custom override", overridden);
+    }
+
+    [Fact]
+    public async Task PropertyService_RemoveWithDefaultGuidDataType_RemovesStringPropertyAcrossAllFiles()
+    {
+        var slnSvc = new SolutionService();
+        Assert.True((await slnSvc.CreateAsync(new CreateSolutionRequest(_tempRoot, "RemoveDefaultApi", MapperKind.AutoMapper))).IsSuccess);
+        var slnDir = Path.Combine(_tempRoot, "RemoveDefaultApi");
+
+        var entitySvc = new EntityService(_locator, _templates);
+        Assert.True((await entitySvc.GenerateAsync(new AddEntityRequest(slnDir, "Order", "Guid"))).IsSuccess);
+
+        var propSvc = new PropertyService(_locator);
+        Assert.True((await propSvc.ApplyAsync(new AddPropertyRequest(slnDir, "Order", "Title", "string"))).IsSuccess);
+
+        var projectsPath = Path.Combine(slnDir, "RemoveDefaultApi");
+        var entityPath = Path.Combine(projectsPath, "RemoveDefaultApi.Core", "Database", "Tables", "Order.cs");
+        var modifyPath = Path.Combine(projectsPath, "RemoveDefaultApi.Core", "Models", "OrderModifyModel.cs");
+        var readPath = Path.Combine(projectsPath, "RemoveDefaultApi.Core", "Models", "OrderReadModel.cs");
+        var configPath = Path.Combine(projectsPath, "RemoveDefaultApi.EntityFramework", "EntityConfigurations", "OrderConfig.cs");
+
+        Assert.Contains("public string Title {get; private set;}", File.ReadAllText(entityPath));
+        Assert.Contains("builder.Property(e => e.Title).HasMaxLength(255);", File.ReadAllText(configPath));
+
+        var removeResult = await propSvc.ApplyAsync(new AddPropertyRequest(slnDir, "Order", "Title", Remove: true));
+        Assert.True(removeResult.IsSuccess, removeResult.Error?.Message);
+
+        Assert.DoesNotContain("Title", File.ReadAllText(modifyPath));
+        Assert.DoesNotContain("Title", File.ReadAllText(readPath));
+        Assert.DoesNotContain("public string Title", File.ReadAllText(entityPath));
+        Assert.DoesNotContain("Title = dto.Title;", File.ReadAllText(entityPath));
+        Assert.DoesNotContain("builder.Property(e => e.Title)", File.ReadAllText(configPath));
+        AssertDeletedDateFluentChainIntact(configPath);
+
+        var loaded = await new ManifestStore().LoadAsync(slnDir);
+        Assert.True(loaded.IsSuccess);
+        var order = Assert.Single(loaded.Value!.Manifest.Entities, e => e.Name == "Order");
+        Assert.DoesNotContain(order.Properties, p => p.Name == "Title");
+    }
+
+    [Fact]
+    public async Task EntityService_And_PropertyService_ConcurrentExecution_SerializesSafelyBehindLock()
+    {
+        var lockManager = new SolutionLockManager();
+        var store = new ManifestStore(lockManager, _locator);
+        var slnSvc = new SolutionService(lockManager: lockManager, manifestStore: store);
+        Assert.True((await slnSvc.CreateAsync(new CreateSolutionRequest(_tempRoot, "ConcurrentPropApi", MapperKind.Mapster))).IsSuccess);
+        var slnDir = Path.Combine(_tempRoot, "ConcurrentPropApi");
+
+        var entityEnteredLock = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowEntityToProceed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var blockingTemplates = new BlockingTemplateProvider(_templates, entityEnteredLock, allowEntityToProceed);
+
+        var propEnteredAcquire = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var spyLockManager = new SpySolutionLockManager(lockManager, propEnteredAcquire);
+
+        var entitySvc = new EntityService(_locator, blockingTemplates, lockManager: lockManager, manifestStore: store);
+        var propSvc = new PropertyService(_locator, lockManager: spyLockManager, manifestStore: store);
+
+        var entityTask = Task.Run(() => entitySvc.GenerateAsync(new AddEntityRequest(slnDir, "Order", "Guid")));
+        try
+        {
+            await entityEnteredLock.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            var propTask = Task.Run(() => propSvc.ApplyAsync(new AddPropertyRequest(slnDir, "Order", "Title", "string")));
+            await Task.WhenAny(propEnteredAcquire.Task, propTask).WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(50);
+
+            // PropertyService must block on the solution lock instead of prematurely checking File.Exists and failing.
+            Assert.False(propTask.IsCompleted);
+
+            allowEntityToProceed.TrySetResult();
+            var entityResult = await entityTask;
+            var propResult = await propTask;
+
+            Assert.True(entityResult.IsSuccess, entityResult.Error?.Message);
+            Assert.True(propResult.IsSuccess, propResult.Error?.Message);
+        }
+        finally
+        {
+            allowEntityToProceed.TrySetResult();
+            await entityTask;
+        }
+
+        var loaded = await store.LoadAsync(slnDir);
+        Assert.True(loaded.IsSuccess);
+        var order = Assert.Single(loaded.Value!.Manifest.Entities, e => e.Name == "Order");
+        Assert.Contains(order.Properties, p => p.Name == "Title" && p.DataType == "string");
+    }
+
+    [Fact]
+    public async Task EntityService_And_RelationService_ConcurrentExecution_SerializesSafelyBehindLock()
+    {
+        var lockManager = new SolutionLockManager();
+        var store = new ManifestStore(lockManager, _locator);
+        var slnSvc = new SolutionService(lockManager: lockManager, manifestStore: store);
+        Assert.True((await slnSvc.CreateAsync(new CreateSolutionRequest(_tempRoot, "ConcurrentRelApi", MapperKind.AutoMapper))).IsSuccess);
+        var slnDir = Path.Combine(_tempRoot, "ConcurrentRelApi");
+
+        var setupEntitySvc = new EntityService(_locator, _templates, lockManager: lockManager, manifestStore: store);
+        Assert.True((await setupEntitySvc.GenerateAsync(new AddEntityRequest(slnDir, "Category", "Guid"))).IsSuccess);
+
+        var entityEnteredLock = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowEntityToProceed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var blockingTemplates = new BlockingTemplateProvider(_templates, entityEnteredLock, allowEntityToProceed);
+
+        var relEnteredAcquire = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var spyLockManager = new SpySolutionLockManager(lockManager, relEnteredAcquire);
+
+        var entitySvc = new EntityService(_locator, blockingTemplates, lockManager: lockManager, manifestStore: store);
+        var relSvc = new RelationService(_locator, lockManager: spyLockManager, manifestStore: store);
+
+        var entityTask = Task.Run(() => entitySvc.GenerateAsync(new AddEntityRequest(slnDir, "Order", "Guid")));
+        try
+        {
+            await entityEnteredLock.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            var relTask = Task.Run(() => relSvc.ApplyAsync(new AddRelationRequest(slnDir, "Category", "Order", "CategoryId", "Guid")));
+            await Task.WhenAny(relEnteredAcquire.Task, relTask).WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(50);
+
+            Assert.False(relTask.IsCompleted);
+
+            allowEntityToProceed.TrySetResult();
+            var entityResult = await entityTask;
+            var relResult = await relTask;
+
+            Assert.True(entityResult.IsSuccess, entityResult.Error?.Message);
+            Assert.True(relResult.IsSuccess, relResult.Error?.Message);
+        }
+        finally
+        {
+            allowEntityToProceed.TrySetResult();
+            await entityTask;
+        }
+
+        var loaded = await store.LoadAsync(slnDir);
+        Assert.True(loaded.IsSuccess);
+        Assert.Equal(2, loaded.Value!.Manifest.Entities.Count);
+        Assert.Single(loaded.Value.Manifest.Relations, r =>
+            r.ParentEntity == "Category" && r.ChildEntity == "Order" && r.ForeignKey == "CategoryId");
+    }
+
+    [Fact]
+    public async Task PropertyService_And_RelationService_WhenSolutionDirectoryMissing_ReturnSolutionNotFoundWithoutCreatingLockDir()
+    {
+        var missingDir = Path.Combine(_tempRoot, "NeverCreatedSolution");
+        var propSvc = new PropertyService(_locator);
+        var relSvc = new RelationService(_locator);
+
+        var propResult = await propSvc.ApplyAsync(new AddPropertyRequest(missingDir, "Order", "Title", "string"));
+        Assert.False(propResult.IsSuccess);
+        Assert.Equal(ErrorCodes.SOLUTION_NOT_FOUND, propResult.Error?.Code);
+        Assert.False(Directory.Exists(missingDir));
+
+        var relResult = await relSvc.ApplyAsync(new AddRelationRequest(missingDir, "Category", "Order", "CategoryId", "Guid"));
+        Assert.False(relResult.IsSuccess);
+        Assert.Equal(ErrorCodes.SOLUTION_NOT_FOUND, relResult.Error?.Code);
+        Assert.False(Directory.Exists(missingDir));
+    }
+
+    private sealed class BlockingTemplateProvider(
+        ITemplateProvider inner,
+        TaskCompletionSource enteredLock,
+        TaskCompletionSource allowProceed) : ITemplateProvider
+    {
+        private int _blockedOnce;
+
+        public string GetTemplate(string solutionPath, MapperKind mapper, string templateName)
+        {
+            if (Interlocked.Exchange(ref _blockedOnce, 1) == 0)
+            {
+                enteredLock.TrySetResult();
+                allowProceed.Task.Wait(TimeSpan.FromSeconds(5));
+            }
+
+            return inner.GetTemplate(solutionPath, mapper, templateName);
+        }
+    }
+
+    private sealed class SpySolutionLockManager(
+        ISolutionLockManager inner,
+        TaskCompletionSource enteredAcquire) : ISolutionLockManager
+    {
+        public Task<IAsyncDisposable> AcquireAsync(
+            string solutionPath,
+            TimeSpan? timeout = null,
+            CancellationToken ct = default)
+        {
+            enteredAcquire.TrySetResult();
+            return inner.AcquireAsync(solutionPath, timeout, ct);
+        }
     }
 
     private sealed class SynchronousProgress<T>(Action<T> handler) : IProgress<T>

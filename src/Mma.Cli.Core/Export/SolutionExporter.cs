@@ -1,9 +1,9 @@
-using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Mma.Cli.Core.Config;
 using Mma.Cli.Core.Results;
+using Mma.Cli.Core.Services;
 using Mma.Cli.Core.Solutions;
 
 namespace Mma.Cli.Core.Export;
@@ -78,12 +78,14 @@ public sealed class SolutionExporter : ISolutionExporter
                 $"Project manifest not found at '{manifestPath}'.");
         }
 
-        JsonElement payload;
+        string jsonPayload;
         try
         {
-            var json = await File.ReadAllTextAsync(manifestPath, Encoding.UTF8, ct).ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(json);
-            payload = doc.RootElement.Clone();
+            var fileBytes = await ServiceFileHelper.ReadFileBytesSharedAsync(manifestPath, ct, maxSharingRetries: 4)
+                .ConfigureAwait(false);
+            var jsonMemory = ServiceFileHelper.StripUtf8Bom(fileBytes);
+            using var doc = JsonDocument.Parse(jsonMemory);
+            jsonPayload = Encoding.UTF8.GetString(jsonMemory.Span);
         }
         catch (OperationCanceledException)
         {
@@ -127,7 +129,8 @@ public sealed class SolutionExporter : ISolutionExporter
         try
         {
             using var client = _httpClientFactory.CreateClient(clientName);
-            using var response = await client.PostAsJsonAsync(importUri, payload, ct).ConfigureAwait(false);
+            using var content = new StringContent(jsonPayload, ServiceFileHelper.Utf8NoBom, "application/json");
+            using var response = await client.PostAsync(importUri, content, ct).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {

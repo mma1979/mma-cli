@@ -16,4 +16,10 @@ public interface IManifestStore
         string solutionPath,
         Func<ProjectManifest, OperationResult<ProjectManifest>> transform,
         CancellationToken ct = default);
+
+    Task<OperationResult<ManifestDocument>> SaveWithHeldLockAsync(
+        string solutionPath,
+        ProjectManifest manifest,
+        string? expectedHash = null,
+        CancellationToken ct = default);
 }

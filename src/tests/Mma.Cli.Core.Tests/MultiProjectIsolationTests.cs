@@ -202,4 +202,46 @@ public sealed class MultiProjectIsolationTests : IDisposable
         var list = await verifyScope.ServiceProvider.GetRequiredService<IWorkspaceRegistry>().ListAsync();
         Assert.Single(list);
     }
+
+    [Fact]
+    public async Task SqliteWorkspaceRegistry_SyncFromManifestAsync_UpdatesEntityNameOnCaseOnlyRename()
+    {
+        var dbPath = Path.Combine(_tempRoot, "case-rename.db");
+        var services = new ServiceCollection();
+        services.AddMmaDatabase(dbPath);
+        await using var provider = services.BuildServiceProvider();
+
+        await using var scope = provider.CreateAsyncScope();
+        var registry = scope.ServiceProvider.GetRequiredService<IWorkspaceRegistry>();
+        await registry.EnsureInitializedAsync();
+
+        var slnPath = Path.Combine(_tempRoot, "CaseApp");
+        var ws = await registry.RegisterAsync("CaseApp", slnPath, "AutoMapper");
+
+        var initialManifest = new ProjectManifest
+        {
+            SolutionName = "CaseApp",
+            Mapper = "AutoMapper",
+            SolutionFormat = ".sln",
+            Entities = [new ManifestEntity("order", "Guid", HasApi: true, Applied: true)]
+        };
+
+        Assert.True((await registry.SyncFromManifestAsync(ws.Id, initialManifest)).IsSuccess);
+        var beforeRename = await registry.FindEntityAsync(ws.Id, "order");
+        Assert.NotNull(beforeRename);
+        Assert.Equal("order", beforeRename.EntityName);
+
+        var renamedManifest = initialManifest with
+        {
+            Entities = [new ManifestEntity("Order", "Guid", HasApi: true, Applied: true)]
+        };
+
+        var syncResult = await registry.SyncFromManifestAsync(ws.Id, renamedManifest);
+        Assert.True(syncResult.IsSuccess);
+
+        var afterRename = await registry.FindEntityAsync(ws.Id, "Order");
+        Assert.NotNull(afterRename);
+        Assert.Equal("Order", afterRename.EntityName);
+        Assert.Null(await registry.FindEntityAsync(ws.Id, "order"));
+    }
 }

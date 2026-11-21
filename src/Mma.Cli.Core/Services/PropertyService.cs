@@ -68,43 +68,49 @@ public sealed class PropertyService : IPropertyService
                 $"Unsupported property data type '{request.DataType}'.");
         }
 
-        var located = _solutionLocator.Locate(request.SolutionPath);
-        if (!located.IsSuccess || located.Value is null)
+        if (!ServiceFileHelper.TryResolveExistingSolutionPath(request.SolutionPath, out var fullSolutionPath, out var pathError))
         {
-            return OperationResult<GenerationSummary>.Failure(
-                located.Error ?? new GenerationError(ErrorCodes.SOLUTION_NOT_FOUND, "Solution could not be located."));
+            return OperationResult<GenerationSummary>.Failure(pathError!);
         }
 
-        var info = located.Value;
-        var modelSuffix = info.DetectedMapper == MapperKind.Mapster ? ".g.cs" : ".cs";
         var entityName = request.EntityName;
         var propertyName = request.PropertyName;
-
-        var modifyModelPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Models", $"{entityName}ModifyModel{modelSuffix}");
-        var readModelPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Models", $"{entityName}ReadModel{modelSuffix}");
-        var entityPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Database", "Tables", $"{entityName}.cs");
-        var entityConfigPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.EntityFramework", "EntityConfigurations", $"{entityName}Config.cs");
-
-        if (!File.Exists(entityPath) || !File.Exists(modifyModelPath) || !File.Exists(readModelPath))
-        {
-            return OperationResult<GenerationSummary>.Failure(
-                ErrorCodes.ENTITY_NOT_FOUND,
-                $"Entity '{entityName}' or its models could not be found in '{info.ProjectsPath}'.");
-        }
-
-        var nullableSuffix = request.Nullable ? "?" : string.Empty;
-        var dtoProperty = $"public {normalizedType}{nullableSuffix} {propertyName} {{get; set;}}";
-        var entityProperty = $"public {normalizedType}{nullableSuffix} {propertyName} {{get; private set;}}";
-        var assignment = $"{propertyName} = dto.{propertyName};";
-        var configLine = BuildConfigLine(normalizedType, propertyName);
 
         IAsyncDisposable? lockHandle = null;
         try
         {
             if (!request.DryRun)
             {
-                lockHandle = await _lockManager.AcquireAsync(info.SolutionPath, ct: ct).ConfigureAwait(false);
+                lockHandle = await _lockManager.AcquireAsync(fullSolutionPath, ct: ct).ConfigureAwait(false);
             }
+
+            var located = _solutionLocator.Locate(fullSolutionPath);
+            if (!located.IsSuccess || located.Value is null)
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    located.Error ?? new GenerationError(ErrorCodes.SOLUTION_NOT_FOUND, "Solution could not be located."));
+            }
+
+            var info = located.Value;
+            var modelSuffix = info.DetectedMapper == MapperKind.Mapster ? ".g.cs" : ".cs";
+
+            var modifyModelPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Models", $"{entityName}ModifyModel{modelSuffix}");
+            var readModelPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Models", $"{entityName}ReadModel{modelSuffix}");
+            var entityPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Database", "Tables", $"{entityName}.cs");
+            var entityConfigPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.EntityFramework", "EntityConfigurations", $"{entityName}Config.cs");
+
+            if (!File.Exists(entityPath) || !File.Exists(modifyModelPath) || !File.Exists(readModelPath))
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    ErrorCodes.ENTITY_NOT_FOUND,
+                    $"Entity '{entityName}' or its models could not be found in '{info.ProjectsPath}'.");
+            }
+
+            var nullableSuffix = request.Nullable ? "?" : string.Empty;
+            var dtoProperty = $"public {normalizedType}{nullableSuffix} {propertyName} {{get; set;}}";
+            var entityProperty = $"public {normalizedType}{nullableSuffix} {propertyName} {{get; private set;}}";
+            var assignment = $"{propertyName} = dto.{propertyName};";
+            var configLine = BuildConfigLine(normalizedType, propertyName);
 
             var modifyLines = await ServiceFileHelper.ReadLinesAsync(modifyModelPath, ct).ConfigureAwait(false);
             var readLines = await ServiceFileHelper.ReadLinesAsync(readModelPath, ct).ConfigureAwait(false);
@@ -114,8 +120,8 @@ public sealed class PropertyService : IPropertyService
 
             if (request.Remove)
             {
-                var propExists = entityLines.Any(l => l.Contains(entityProperty, StringComparison.Ordinal))
-                                 || modifyLines.Any(l => l.Contains(dtoProperty, StringComparison.Ordinal));
+                var propExists = ServiceFileHelper.HasPropertyNamed(entityLines, propertyName)
+                                 || ServiceFileHelper.HasPropertyNamed(modifyLines, propertyName);
                 if (!propExists)
                 {
                     return OperationResult<GenerationSummary>.Failure(
@@ -123,9 +129,9 @@ public sealed class PropertyService : IPropertyService
                         $"Property '{propertyName}' was not found on entity '{entityName}'.");
                 }
 
-                ServiceFileHelper.RemoveLineContaining(modifyLines, dtoProperty);
-                ServiceFileHelper.RemoveLineContaining(readLines, dtoProperty);
-                ServiceFileHelper.RemoveLineContaining(entityLines, entityProperty);
+                ServiceFileHelper.RemovePropertyNamed(modifyLines, propertyName);
+                ServiceFileHelper.RemovePropertyNamed(readLines, propertyName);
+                ServiceFileHelper.RemovePropertyNamed(entityLines, propertyName);
                 ServiceFileHelper.RemoveLineContaining(entityLines, assignment);
                 ServiceFileHelper.RemoveLineContaining(entityLines, assignment);
 
@@ -133,10 +139,12 @@ public sealed class PropertyService : IPropertyService
                 pendingWrites.Add((readModelPath, readLines));
                 pendingWrites.Add((entityPath, entityLines));
 
-                if (!string.IsNullOrEmpty(configLine) && File.Exists(entityConfigPath))
+                if (File.Exists(entityConfigPath))
                 {
                     var configLines = await ServiceFileHelper.ReadLinesAsync(entityConfigPath, ct).ConfigureAwait(false);
-                    if (ServiceFileHelper.RemoveLineContaining(configLines, configLine))
+                    var removedConfig = (!string.IsNullOrEmpty(configLine) && ServiceFileHelper.RemoveLineContaining(configLines, configLine))
+                                        || ServiceFileHelper.RemoveLineContaining(configLines, $"builder.Property(e => e.{propertyName})");
+                    if (removedConfig)
                     {
                         pendingWrites.Add((entityConfigPath, configLines));
                     }

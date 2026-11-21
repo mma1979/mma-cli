@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Results;
+using Mma.Cli.Core.Services;
 using Mma.Cli.Core.Solutions;
 
 namespace Mma.Cli.Core.Manifest;
@@ -79,7 +80,7 @@ public sealed class ManifestStore : IManifestStore
         byte[] fileBytes;
         try
         {
-            fileBytes = await ReadFileBytesSharedAsync(manifestPath, ct).ConfigureAwait(false);
+            fileBytes = await ServiceFileHelper.ReadFileBytesSharedAsync(manifestPath, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -95,7 +96,7 @@ public sealed class ManifestStore : IManifestStore
         }
 
         var contentHash = ComputeHash(fileBytes);
-        var jsonMemory = StripUtf8Bom(fileBytes);
+        var jsonMemory = ServiceFileHelper.StripUtf8Bom(fileBytes);
 
         try
         {
@@ -133,7 +134,7 @@ public sealed class ManifestStore : IManifestStore
                         UpgradedFromV1: false));
                 }
 
-                if (schemaVersion > 2)
+                if (schemaVersion < 1 || schemaVersion > 2)
                 {
                     return OperationResult<ManifestDocument>.Failure(
                         ErrorCodes.MANIFEST_INVALID,
@@ -265,7 +266,7 @@ public sealed class ManifestStore : IManifestStore
         }
     }
 
-    internal async Task<OperationResult<ManifestDocument>> SaveWithHeldLockAsync(
+    public async Task<OperationResult<ManifestDocument>> SaveWithHeldLockAsync(
         string solutionPath,
         ProjectManifest manifest,
         string? expectedHash = null,
@@ -276,6 +277,11 @@ public sealed class ManifestStore : IManifestStore
         if (ct.IsCancellationRequested)
         {
             return OperationResult<ManifestDocument>.Failure(ErrorCodes.CANCELLED, "Manifest save was cancelled.");
+        }
+
+        if (string.IsNullOrWhiteSpace(solutionPath))
+        {
+            return OperationResult<ManifestDocument>.Failure(ErrorCodes.VALIDATION_ERROR, "Solution path cannot be empty.");
         }
 
         string fullSolutionPath;
@@ -309,7 +315,7 @@ public sealed class ManifestStore : IManifestStore
                         $"Manifest conflict: expected hash '{expectedHash}', but '{manifestPath}' does not exist.");
                 }
 
-                var currentBytes = await ReadFileBytesSharedAsync(manifestPath, ct).ConfigureAwait(false);
+                var currentBytes = await ServiceFileHelper.ReadFileBytesSharedAsync(manifestPath, ct).ConfigureAwait(false);
                 var currentHash = ComputeHash(currentBytes);
                 if (!string.Equals(currentHash, expectedHash, StringComparison.OrdinalIgnoreCase))
                 {
@@ -684,30 +690,8 @@ public sealed class ManifestStore : IManifestStore
     private static string GetManifestPath(string fullSolutionPath) =>
         Path.Combine(fullSolutionPath, ".mma", "project.mma");
 
-    private static async Task<byte[]> ReadFileBytesSharedAsync(string path, CancellationToken ct)
-    {
-        await using var stream = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete,
-            bufferSize: 4096,
-            useAsync: true);
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
-        return ms.ToArray();
-    }
-
     private static string ComputeHash(byte[] bytes) =>
         "sha256:" + Convert.ToHexStringLower(SHA256.HashData(bytes));
-
-    private static ReadOnlyMemory<byte> StripUtf8Bom(byte[] bytes)
-    {
-        var preamble = Encoding.UTF8.Preamble;
-        return bytes.AsSpan().StartsWith(preamble)
-            ? bytes.AsMemory(preamble.Length)
-            : bytes.AsMemory();
-    }
 
     private static bool TryGetPropertyIgnoreCase(JsonElement obj, string name, out JsonElement value)
     {

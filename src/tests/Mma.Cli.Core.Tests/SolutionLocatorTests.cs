@@ -1,3 +1,4 @@
+using System.Text;
 using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Results;
 using Mma.Cli.Core.Solutions;
@@ -156,5 +157,33 @@ public sealed class SolutionLocatorTests : IDisposable
 
         Assert.True(result.IsSuccess);
         Assert.Equal(MapperKind.AutoMapper, result.Value!.DetectedMapper);
+    }
+
+    [Fact]
+    public async Task Locate_WhenManifestHasUtf8BomAndHeldOpenWithReadWriteShare_DetectsManifestMapper()
+    {
+        File.WriteAllText(Path.Combine(_tempRoot, "BomMapsterApp.sln"), string.Empty);
+        var coreDir = Path.Combine(_tempRoot, "BomMapsterApp", "BomMapsterApp.Core");
+        Directory.CreateDirectory(coreDir);
+        File.WriteAllText(Path.Combine(coreDir, "MappingProfile.cs"), "public class MappingProfile {}");
+
+        var mmaDir = Path.Combine(_tempRoot, ".mma");
+        Directory.CreateDirectory(mmaDir);
+        var manifestPath = Path.Combine(mmaDir, "project.mma");
+
+        var bom = Encoding.UTF8.GetPreamble();
+        var payload = Encoding.UTF8.GetBytes("""{"schemaVersion":2,"solutionName":"BomMapsterApp","mapper":"Mapster"}""");
+        var bytesWithBom = new byte[bom.Length + payload.Length];
+        Buffer.BlockCopy(bom, 0, bytesWithBom, 0, bom.Length);
+        Buffer.BlockCopy(payload, 0, bytesWithBom, bom.Length, payload.Length);
+        await File.WriteAllBytesAsync(manifestPath, bytesWithBom);
+
+        await using var heldStream = new FileStream(manifestPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+
+        var locator = new SolutionLocator();
+        var result = locator.Locate(_tempRoot);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(MapperKind.Mapster, result.Value!.DetectedMapper);
     }
 }

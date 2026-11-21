@@ -200,6 +200,7 @@ public sealed class SqliteWorkspaceRegistry : IWorkspaceRegistry
         {
             if (existingByName.TryGetValue(name, out var existingRecord))
             {
+                existingRecord.EntityName = manifestEntity.Name;
                 existingRecord.PkType = manifestEntity.PkType;
                 existingRecord.HasApi = manifestEntity.HasApi;
                 existingRecord.Applied = manifestEntity.Applied;

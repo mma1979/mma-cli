@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Mma.Cli.Core.Domain;
 using Mma.Cli.Core.Results;
+using Mma.Cli.Core.Services;
 
 namespace Mma.Cli.Core.Solutions;
 
@@ -83,8 +84,9 @@ public sealed class SolutionLocator : ISolutionLocator
         {
             try
             {
-                using var stream = File.OpenRead(manifestPath);
-                using var doc = JsonDocument.Parse(stream, new JsonDocumentOptions
+                var fileBytes = ServiceFileHelper.ReadFileBytesShared(manifestPath);
+                var jsonMemory = ServiceFileHelper.StripUtf8Bom(fileBytes);
+                using var doc = JsonDocument.Parse(jsonMemory, new JsonDocumentOptions
                 {
                     CommentHandling = JsonCommentHandling.Skip,
                     AllowTrailingCommas = true

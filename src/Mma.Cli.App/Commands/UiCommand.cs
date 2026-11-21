@@ -85,25 +85,32 @@ public static class UiCommand
 
         try
         {
+            var stdoutPipe = json
+                ? PipeTarget.Null
+                : PipeTarget.ToDelegate(line =>
+                {
+                    if (!string.IsNullOrWhiteSpace(line))
+                    {
+                        console.MarkupLine($"[grey]{Markup.Escape(line)}[/]");
+                    }
+                });
+            var stderrPipe = json
+                ? PipeTarget.Null
+                : PipeTarget.ToDelegate(line =>
+                {
+                    if (!string.IsNullOrWhiteSpace(line))
+                    {
+                        console.MarkupLine($"[red]{Markup.Escape(line)}[/]");
+                    }
+                });
+
             var result = await CliWrap.Cli.Wrap("dotnet")
                 .WithWorkingDirectory(workingDir)
                 .WithArguments([targetDll, "--urls", url])
                 .WithEnvironmentVariables(env => env.Set("ASPNETCORE_URLS", url))
                 .WithValidation(CommandResultValidation.None)
-                .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
-                {
-                    if (!json && !string.IsNullOrWhiteSpace(line))
-                    {
-                        console.MarkupLine($"[grey]{Markup.Escape(line)}[/]");
-                    }
-                }))
-                .WithStandardErrorPipe(PipeTarget.ToDelegate(line =>
-                {
-                    if (!json && !string.IsNullOrWhiteSpace(line))
-                    {
-                        console.MarkupLine($"[red]{Markup.Escape(line)}[/]");
-                    }
-                }))
+                .WithStandardOutputPipe(stdoutPipe)
+                .WithStandardErrorPipe(stderrPipe)
                 .ExecuteAsync(ct)
                 .ConfigureAwait(false);
 

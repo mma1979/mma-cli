@@ -76,55 +76,61 @@ public sealed class RelationService : IRelationService
                 $"Unsupported foreign key data type '{request.ForeignKeyType}'.");
         }
 
-        var located = _solutionLocator.Locate(request.SolutionPath);
-        if (!located.IsSuccess || located.Value is null)
+        if (!ServiceFileHelper.TryResolveExistingSolutionPath(request.SolutionPath, out var fullSolutionPath, out var pathError))
         {
-            return OperationResult<GenerationSummary>.Failure(
-                located.Error ?? new GenerationError(ErrorCodes.SOLUTION_NOT_FOUND, "Solution could not be located."));
+            return OperationResult<GenerationSummary>.Failure(pathError!);
         }
 
-        var info = located.Value;
-        var modelSuffix = info.DetectedMapper == MapperKind.Mapster ? ".g.cs" : ".cs";
         var parentEntity = request.ParentEntity;
         var childEntity = request.ChildEntity;
         var foreignKey = request.ForeignKey;
         var childrenSetName = NamingHelper.Pluralize(childEntity);
-
-        var parentModifyModelPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Models", $"{parentEntity}ModifyModel{modelSuffix}");
-        var childModifyModelPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Models", $"{childEntity}ModifyModel{modelSuffix}");
-        var childReadModelPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Models", $"{childEntity}ReadModel{modelSuffix}");
-        var parentEntityPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Database", "Tables", $"{parentEntity}.cs");
-        var childEntityPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Database", "Tables", $"{childEntity}.cs");
-        var parentConfigPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.EntityFramework", "EntityConfigurations", $"{parentEntity}Config.cs");
-
-        if (!File.Exists(parentEntityPath) || !File.Exists(childEntityPath)
-            || !File.Exists(parentModifyModelPath) || !File.Exists(childModifyModelPath)
-            || !File.Exists(childReadModelPath) || !File.Exists(parentConfigPath))
-        {
-            return OperationResult<GenerationSummary>.Failure(
-                ErrorCodes.ENTITY_NOT_FOUND,
-                $"Parent entity '{parentEntity}' or child entity '{childEntity}' files could not be found.");
-        }
-
-        var parentDtoNav = BuildRelationProperty(false, true, $"List<{childEntity}>", childrenSetName);
-        var childDtoNav = BuildRelationProperty(false, true, parentEntity, parentEntity);
-        var childDtoFk = BuildRelationProperty(false, false, normalizedFkType, foreignKey);
-        var parentEntityNav = BuildRelationProperty(false, true, $"ICollection<{childEntity}>", childrenSetName);
-        var parentEntityAssign = $"{childrenSetName} ??= new List<{childEntity}>();";
-        var childEntityNav = BuildRelationProperty(true, true, parentEntity, parentEntity);
-        var childEntityFk = BuildRelationProperty(true, false, normalizedFkType, foreignKey);
-        var childEntityAssign = $"{foreignKey} = dto.{foreignKey};";
-        var parentConfigPrefix =
-            $"builder.HasMany(e => e.{childrenSetName}).WithOne(e => e.{parentEntity}).HasForeignKey(e => e.{foreignKey})";
-        var parentConfigLine = $"{parentConfigPrefix}.OnDelete(DeleteBehavior.Cascade);";
 
         IAsyncDisposable? lockHandle = null;
         try
         {
             if (!request.DryRun)
             {
-                lockHandle = await _lockManager.AcquireAsync(info.SolutionPath, ct: ct).ConfigureAwait(false);
+                lockHandle = await _lockManager.AcquireAsync(fullSolutionPath, ct: ct).ConfigureAwait(false);
             }
+
+            var located = _solutionLocator.Locate(fullSolutionPath);
+            if (!located.IsSuccess || located.Value is null)
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    located.Error ?? new GenerationError(ErrorCodes.SOLUTION_NOT_FOUND, "Solution could not be located."));
+            }
+
+            var info = located.Value;
+            var modelSuffix = info.DetectedMapper == MapperKind.Mapster ? ".g.cs" : ".cs";
+
+            var parentModifyModelPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Models", $"{parentEntity}ModifyModel{modelSuffix}");
+            var childModifyModelPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Models", $"{childEntity}ModifyModel{modelSuffix}");
+            var childReadModelPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Models", $"{childEntity}ReadModel{modelSuffix}");
+            var parentEntityPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Database", "Tables", $"{parentEntity}.cs");
+            var childEntityPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.Core", "Database", "Tables", $"{childEntity}.cs");
+            var parentConfigPath = Path.Combine(info.ProjectsPath, $"{info.SolutionName}.EntityFramework", "EntityConfigurations", $"{parentEntity}Config.cs");
+
+            if (!File.Exists(parentEntityPath) || !File.Exists(childEntityPath)
+                || !File.Exists(parentModifyModelPath) || !File.Exists(childModifyModelPath)
+                || !File.Exists(childReadModelPath) || !File.Exists(parentConfigPath))
+            {
+                return OperationResult<GenerationSummary>.Failure(
+                    ErrorCodes.ENTITY_NOT_FOUND,
+                    $"Parent entity '{parentEntity}' or child entity '{childEntity}' files could not be found.");
+            }
+
+            var parentDtoNav = BuildRelationProperty(false, true, $"List<{childEntity}>", childrenSetName);
+            var childDtoNav = BuildRelationProperty(false, true, parentEntity, parentEntity);
+            var childDtoFk = BuildRelationProperty(false, false, normalizedFkType, foreignKey);
+            var parentEntityNav = BuildRelationProperty(false, true, $"ICollection<{childEntity}>", childrenSetName);
+            var parentEntityAssign = $"{childrenSetName} ??= new List<{childEntity}>();";
+            var childEntityNav = BuildRelationProperty(true, true, parentEntity, parentEntity);
+            var childEntityFk = BuildRelationProperty(true, false, normalizedFkType, foreignKey);
+            var childEntityAssign = $"{foreignKey} = dto.{foreignKey};";
+            var parentConfigPrefix =
+                $"builder.HasMany(e => e.{childrenSetName}).WithOne(e => e.{parentEntity}).HasForeignKey(e => e.{foreignKey})";
+            var parentConfigLine = $"{parentConfigPrefix}.OnDelete(DeleteBehavior.Cascade);";
 
             var parentModifyLines = await ServiceFileHelper.ReadLinesAsync(parentModifyModelPath, ct).ConfigureAwait(false);
             var childModifyLines = await ServiceFileHelper.ReadLinesAsync(childModifyModelPath, ct).ConfigureAwait(false);

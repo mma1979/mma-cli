@@ -517,4 +517,21 @@ public sealed class ManifestStoreTests : IDisposable
         Assert.Equal(customerBefore, await File.ReadAllTextAsync(customerEntityPath));
         Assert.Equal(orderBefore, await File.ReadAllTextAsync(orderEntityPath));
     }
+
+    [Theory]
+    [InlineData("""{"schemaVersion":0}""")]
+    [InlineData("""{"schemaVersion":0,"Entities":[{"Name":"Order","PkType":"Guid"}]}""")]
+    [InlineData("""{"schemaVersion":-1,"Entities":[]}""")]
+    public async Task LoadAsync_WhenSchemaVersionLessThanOne_ReturnsManifestInvalid(string manifestJson)
+    {
+        var slnDir = Path.Combine(_tempRoot, $"BadSchema-{Guid.NewGuid():N}");
+        var mmaDir = Path.Combine(slnDir, ".mma");
+        Directory.CreateDirectory(mmaDir);
+        await File.WriteAllTextAsync(Path.Combine(mmaDir, "project.mma"), manifestJson);
+
+        var result = await new ManifestStore().LoadAsync(slnDir);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.MANIFEST_INVALID, result.Error?.Code);
+    }
 }

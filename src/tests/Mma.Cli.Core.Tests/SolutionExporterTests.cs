@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Mma.Cli.Core.Config;
 using Mma.Cli.Core.Export;
 using Mma.Cli.Core.Results;
@@ -169,6 +170,35 @@ public sealed class SolutionExporterTests : IDisposable
         Assert.Equal(ErrorCodes.HTTP_ERROR, result.Error?.Code);
     }
 
+    [Fact]
+    public async Task ExportAsync_WhenManifestHasUtf8BomAndHeldOpenWithReadWriteShare_StripsBomAndPostsCleanJson()
+    {
+        var slnDir = CreateSampleSolutionDir("ExportBomSample", """{"GeneratorEndpoint":"https://export.local:5443"}""");
+        var manifestPath = Path.Combine(slnDir, ".mma", "project.mma");
+        var payloadJson = """{"schemaVersion":2,"solutionName":"ExportBomSample","mapper":"AutoMapper","solutionFormat":".sln","entities":[],"relations":[]}""";
+        var bom = Encoding.UTF8.GetPreamble();
+        var payloadBytes = Encoding.UTF8.GetBytes(payloadJson);
+        var bytesWithBom = new byte[bom.Length + payloadBytes.Length];
+        Buffer.BlockCopy(bom, 0, bytesWithBom, 0, bom.Length);
+        Buffer.BlockCopy(payloadBytes, 0, bytesWithBom, bom.Length, payloadBytes.Length);
+        await File.WriteAllBytesAsync(manifestPath, bytesWithBom);
+
+        await using var heldStream = new FileStream(manifestPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+
+        var recordingHandler = new RecordingHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var exporter = new SolutionExporter(
+            new SolutionLocator(),
+            new JsonConfigStore(userConfigDir: Path.Combine(_tempRoot, "empty-global")),
+            new FakeHttpClientFactory(recordingHandler));
+
+        var result = await exporter.ExportAsync(slnDir);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.False(recordingHandler.LastBodyBytes.AsSpan().StartsWith(bom));
+        using var parsed = JsonDocument.Parse(recordingHandler.LastBody);
+        Assert.Equal("ExportBomSample", parsed.RootElement.GetProperty("solutionName").GetString());
+    }
+
     private string CreateSampleSolutionDir(string name, string? configJson)
     {
         var slnDir = Path.Combine(_tempRoot, name);
@@ -204,6 +234,7 @@ public sealed class SolutionExporterTests : IDisposable
         public HttpMethod? LastMethod { get; private set; }
         public Uri? LastRequestUri { get; private set; }
         public string LastBody { get; private set; } = string.Empty;
+        public byte[] LastBodyBytes { get; private set; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -214,7 +245,8 @@ public sealed class SolutionExporterTests : IDisposable
             LastRequestUri = request.RequestUri;
             if (request.Content is not null)
             {
-                LastBody = await request.Content.ReadAsStringAsync(cancellationToken);
+                LastBodyBytes = await request.Content.ReadAsByteArrayAsync(cancellationToken);
+                LastBody = Encoding.UTF8.GetString(LastBodyBytes);
             }
 
             return responder(request);
