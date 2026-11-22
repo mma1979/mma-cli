@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Mma.Cli.Bff": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:8505;http://localhost:8506"
+    }
+  }
+}
