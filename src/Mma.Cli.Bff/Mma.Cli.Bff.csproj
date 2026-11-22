@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <WebProjectDirectory>$(MSBuildProjectDirectory)\..\Mma.Cli.Web</WebProjectDirectory>
+    <WebDistDirectory>$(WebProjectDirectory)\dist</WebDistDirectory>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,5 +17,20 @@
     <ProjectReference Include="..\Mma.Cli.Core\Mma.Cli.Core.csproj" />
     <ProjectReference Include="..\Mma.Cli.Database\Mma.Cli.Database.csproj" />
   </ItemGroup>
+
+  <Target Name="BuildWebAssets" BeforeTargets="Publish">
+    <Exec Command="npm ci --no-audit --no-fund"
+          WorkingDirectory="$(WebProjectDirectory)"
+          Condition="!Exists('$(WebProjectDirectory)\node_modules')" />
+    <Exec Command="npm run build"
+          WorkingDirectory="$(WebProjectDirectory)"
+          Condition="'$(SkipWebBuild)' != 'true'" />
+    <RemoveDir Directories="$(MSBuildProjectDirectory)\wwwroot" />
+    <ItemGroup>
+      <WebDistFiles Include="$(WebDistDirectory)\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WebDistFiles)"
+          DestinationFiles="@(WebDistFiles->'$(MSBuildProjectDirectory)\wwwroot\%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 
 </Project>

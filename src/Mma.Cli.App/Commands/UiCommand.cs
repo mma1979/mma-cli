@@ -1,4 +1,8 @@
 using System.CommandLine;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
 using CliWrap;
 using Mma.Cli.App.Output;
 using Mma.Cli.Core.Results;
@@ -15,19 +19,25 @@ public static class UiCommand
     {
         var portOption = new Option<int>("--port", "-p")
         {
-            Description = "TCP port for the local UI server (default: 5180).",
-            DefaultValueFactory = _ => 5180
+            Description = "TCP port for the local UI server (default: an ephemeral loopback port).",
+            DefaultValueFactory = _ => 0
+        };
+        var headlessCheckOption = new Option<bool>("--headless-check")
+        {
+            Description = "Verify that the packaged BFF payload is available without launching a browser."
         };
 
         var command = new System.CommandLine.Command("ui", "Launch the local MMA web UI.");
         command.Add(portOption);
+        command.Add(headlessCheckOption);
 
         command.SetAction(async (ParseResult parseResult, CancellationToken ct) =>
         {
             var port = parseResult.GetRequiredValue(portOption);
             var json = parseResult.GetValue(jsonOption);
+            var headlessCheck = parseResult.GetValue(headlessCheckOption);
 
-            return await ExecuteAsync(console, outputWriter, port, json, ct).ConfigureAwait(false);
+            return await ExecuteAsync(console, outputWriter, port, json, headlessCheck, ct).ConfigureAwait(false);
         });
 
         return command;
@@ -38,6 +48,7 @@ public static class UiCommand
         TextWriter outputWriter,
         int port,
         bool json,
+        bool headlessCheck,
         CancellationToken ct)
     {
         if (port is < 1 or > 65535)
@@ -53,16 +64,8 @@ public static class UiCommand
         }
 
         var baseDir = AppContext.BaseDirectory;
-        var bffDll = Path.Combine(baseDir, "bff", "Mma.Cli.Bff.dll");
-        var legacyUiDll = Path.Combine(baseDir, "UI", "cli-ui.dll");
-
-        string? targetDll = File.Exists(bffDll)
-            ? bffDll
-            : File.Exists(legacyUiDll)
-                ? legacyUiDll
-                : null;
-
-        if (targetDll is null)
+        var targetDll = Path.Combine(baseDir, "bff", "Mma.Cli.Bff.dll");
+        if (!File.Exists(targetDll))
         {
             CliOutputFormatter.WriteFailure(
                 console,
@@ -70,11 +73,23 @@ public static class UiCommand
                 json,
                 "ui",
                 ErrorCodes.IO_ERROR,
-                $"UI server assembly not found. Checked '{bffDll}' and '{legacyUiDll}'.");
+                $"Packaged BFF assembly was not found at '{targetDll}'.");
             return 1;
         }
 
+        if (headlessCheck)
+        {
+            CliOutputFormatter.WriteSuccess(console, outputWriter, json, "ui", new { assembly = targetDll }, "Packaged UI payload is available.");
+            return 0;
+        }
+
+        if (port == 0)
+        {
+            port = GetAvailableLoopbackPort();
+        }
+
         var url = $"http://127.0.0.1:{port}";
+        var bootstrapToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
         var workingDir = Path.GetDirectoryName(targetDll) ?? baseDir;
 
         if (!json)
@@ -104,15 +119,21 @@ public static class UiCommand
                     }
                 });
 
-            var result = await CliWrap.Cli.Wrap("dotnet")
+            var processTask = CliWrap.Cli.Wrap("dotnet")
                 .WithWorkingDirectory(workingDir)
                 .WithArguments([targetDll, "--urls", url])
-                .WithEnvironmentVariables(env => env.Set("ASPNETCORE_URLS", url))
+                .WithEnvironmentVariables(env =>
+                {
+                    env.Set("ASPNETCORE_URLS", url);
+                    env.Set("MMA_BFF_BOOTSTRAP_TOKEN", bootstrapToken);
+                })
                 .WithValidation(CommandResultValidation.None)
                 .WithStandardOutputPipe(stdoutPipe)
                 .WithStandardErrorPipe(stderrPipe)
-                .ExecuteAsync(ct)
-                .ConfigureAwait(false);
+                .ExecuteAsync(ct);
+
+            TryOpenBrowser($"{url}/?token={Uri.EscapeDataString(bootstrapToken)}");
+            var result = await processTask.ConfigureAwait(false);
 
             if (result.ExitCode != 0)
             {
@@ -157,6 +178,25 @@ public static class UiCommand
                 $"UI execution failed: {ex.Message}",
                 ex.ToString());
             return 1;
+        }
+    }
+
+    private static int GetAvailableLoopbackPort()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
+
+    private static void TryOpenBrowser(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch
+        {
+            // The BFF remains available even when a headless environment cannot open a browser.
         }
     }
 }

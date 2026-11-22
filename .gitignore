@@ -288,6 +288,16 @@ FakesAssemblies/
 .ntvs_analysis.dat
 node_modules/
 
+# React workspace build and local-only files
+src/Mma.Cli.Web/dist/
+src/Mma.Cli.Web/playwright-report/
+src/Mma.Cli.Web/test-results/
+src/Mma.Cli.Web/.vite/
+src/Mma.Cli.Web/*.local
+src/Mma.Cli.Web/.env
+src/Mma.Cli.Web/.env.*
+!src/Mma.Cli.Web/.env.example
+
 # Visual Studio 6 build log
 *.plg
 

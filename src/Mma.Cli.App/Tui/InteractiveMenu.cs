@@ -270,7 +270,7 @@ public static class InteractiveMenu
                     : ValidationResult.Error("[red]Port must be between 1 and 65535.[/]")),
             ct).ConfigureAwait(false);
 
-        await UiCommand.ExecuteAsync(console, outputWriter, port, json: false, ct).ConfigureAwait(false);
+        await UiCommand.ExecuteAsync(console, outputWriter, port, json: false, headlessCheck: false, ct).ConfigureAwait(false);
     }
 
     private static Task<string> PromptSolutionPathAsync(

@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: oklch(0.985 0.002 260);
+  --foreground: oklch(0.21 0.02 262);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.962 0.004 260);
+  --muted-foreground: oklch(0.5 0.018 262);
+  --border: oklch(0.9 0.008 262);
+  --primary: oklch(0.53 0.17 264);
+  --primary-foreground: oklch(0.99 0 0);
+  --danger: oklch(0.55 0.2 25);
+  --success: oklch(0.52 0.14 155);
+  --warning: oklch(0.66 0.14 78);
+}
+
+.dark {
+  --background: oklch(0.19 0.015 262);
+  --foreground: oklch(0.95 0.005 260);
+  --card: oklch(0.235 0.016 262);
+  --muted: oklch(0.28 0.016 262);
+  --muted-foreground: oklch(0.72 0.012 260);
+  --border: oklch(0.33 0.015 262);
+  --primary: oklch(0.68 0.14 264);
+  --primary-foreground: oklch(0.16 0.02 262);
+  --danger: oklch(0.66 0.19 25);
+  --success: oklch(0.7 0.13 155);
+  --warning: oklch(0.78 0.13 78);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  dialog::backdrop {
+    background-color: rgb(0 0 0 / 45%);
+  }
+}
+
+@layer components {
+  .diff-line {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 20px;
+    white-space: pre;
+    padding-inline: 12px;
+  }
+
+  .diff-add {
+    background-color: color-mix(in oklab, var(--success) 16%, transparent);
+  }
+
+  .diff-del {
+    background-color: color-mix(in oklab, var(--danger) 16%, transparent);
+  }
+
+  .diff-hunk {
+    background-color: var(--muted);
+    color: var(--muted-foreground);
+  }
+}

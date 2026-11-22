@@ -11,6 +11,7 @@
     <AssemblyName>mma-cli</AssemblyName>
     <Version>5.0.0-alpha.1</Version>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <BffPublishDirectory>$(BaseIntermediateOutputPath)bff-publish</BffPublishDirectory>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,5 +26,13 @@
     <ProjectReference Include="..\Mma.Cli.Core\Mma.Cli.Core.csproj" />
     <ProjectReference Include="..\Mma.Cli.Database\Mma.Cli.Database.csproj" />
   </ItemGroup>
+
+  <Target Name="PrepareBffPayload" BeforeTargets="GenerateNuspec">
+    <RemoveDir Directories="$(BffPublishDirectory)" />
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\Mma.Cli.Bff\Mma.Cli.Bff.csproj&quot; -c $(Configuration) --no-restore -p:SkipWebBuild=$(SkipWebBuild) -o &quot;$(BffPublishDirectory)&quot;" />
+    <ItemGroup>
+      <None Include="$(BffPublishDirectory)\**\*" Pack="true" PackagePath="tools\net10.0\any\bff\%(RecursiveDir)" />
+    </ItemGroup>
+  </Target>
 
 </Project>
