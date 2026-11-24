@@ -2,5 +2,8 @@
   <PropertyGroup>
     <Nullable>enable</Nullable>
     <Deterministic>true</Deterministic>
+    <Version>10.0.0-preview.1</Version>
+    <AssemblyVersion>10.0.0.0</AssemblyVersion>
+    <FileVersion>10.0.0.0</FileVersion>
   </PropertyGroup>
 </Project>
