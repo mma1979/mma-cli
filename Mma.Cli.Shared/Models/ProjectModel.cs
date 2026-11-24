@@ -12,6 +12,8 @@ namespace Mma.Cli.Shared.Models
         public string Name { get; set; } = "";
         public string Path { get; set; } = "";
         public string? ProjectJson { get; set; }
+        public string? SchemaJson { get; set; }
+        public DateTime? UpdatedAtUtc { get; set; }
 
         public virtual List<EntityModel> Entities { get; set; } = new();
     }

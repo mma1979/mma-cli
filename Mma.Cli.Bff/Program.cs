@@ -1,5 +1,12 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json.Serialization;
+
+using Microsoft.EntityFrameworkCore;
+
+using Mma.Cli.Bff.Persistence;
+using Mma.Cli.Bff.Security;
+using Mma.Cli.Shared.Data;
 
 var currentDirectory = Directory.GetCurrentDirectory();
 var webRootCandidates = new[]
@@ -21,7 +28,8 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 var configuredUrls = builder.Configuration["urls"] ?? Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
 if (string.IsNullOrWhiteSpace(configuredUrls))
 {
-    builder.WebHost.UseUrls("http://127.0.0.1:5080");
+    configuredUrls = "http://127.0.0.1:5080";
+    builder.WebHost.UseUrls(configuredUrls);
 }
 
 builder.Logging.ClearProviders();
@@ -39,6 +47,16 @@ var allowedOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     "http://[::1]:5080",
     "https://localhost:44361"
 };
+
+foreach (var rawUrl in configuredUrls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+{
+    if (Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri) && uri.Port > 0)
+    {
+        allowedOrigins.Add($"{uri.Scheme}://localhost:{uri.Port}");
+        allowedOrigins.Add($"{uri.Scheme}://127.0.0.1:{uri.Port}");
+        allowedOrigins.Add($"{uri.Scheme}://[::1]:{uri.Port}");
+    }
+}
 
 if (builder.Environment.IsDevelopment())
 {
@@ -59,11 +77,72 @@ if (configuredOrigins is not null)
     }
 }
 
-builder.Services.AddSingleton(new DatabaseTargetPolicyOptions
+var appVersion = Assembly.GetExecutingAssembly()
+    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0] ?? "5.0.0";
+
+builder.Services.AddSingleton(sp =>
 {
-    AllowedOrigins = allowedOrigins.ToArray(),
-    AllowLoopbackTargets = builder.Configuration.GetValue<bool>("Introspection:AllowLoopbackTargets"),
-    AllowPrivateNetworkTargets = builder.Configuration.GetValue<bool>("Introspection:AllowPrivateNetworkTargets"),
+    var config = sp.GetRequiredService<IConfiguration>();
+    var cliMode = config["MMA_CLI_MODE"] ?? Environment.GetEnvironmentVariable("MMA_CLI_MODE");
+    var isLocalCliMode = string.Equals(cliMode, "local", StringComparison.OrdinalIgnoreCase);
+    var sessionToken = config["MMA_UI_TOKEN"] ?? Environment.GetEnvironmentVariable("MMA_UI_TOKEN");
+    var initialPath = config["MMA_INITIAL_PATH"] ?? Environment.GetEnvironmentVariable("MMA_INITIAL_PATH");
+
+    return new LocalSessionOptions
+    {
+        Token = sessionToken,
+        Mode = isLocalCliMode ? "local-cli" : "standalone",
+        InitialPath = string.IsNullOrWhiteSpace(initialPath) ? null : initialPath,
+        Version = appVersion,
+    };
+});
+
+builder.Services.AddDbContext<CliDbContext>((sp, options) =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var databasePath = UserDataPathResolver.ResolveDatabasePath(config);
+    options.UseSqlite(UserDataPathResolver.BuildConnectionString(databasePath));
+});
+
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var env = sp.GetRequiredService<IWebHostEnvironment>();
+
+    var origins = new HashSet<string>(allowedOrigins, StringComparer.OrdinalIgnoreCase);
+    if (env.IsDevelopment())
+    {
+        origins.Add("http://localhost:5173");
+        origins.Add("http://127.0.0.1:5173");
+        origins.Add("http://[::1]:5173");
+    }
+
+    var extraOrigins = config.GetSection("Introspection:AllowedOrigins").Get<string[]>();
+    if (extraOrigins is not null)
+    {
+        foreach (var origin in extraOrigins)
+        {
+            if (!string.IsNullOrWhiteSpace(origin) && !origin.Contains('*'))
+            {
+                origins.Add(origin.Trim());
+            }
+        }
+    }
+
+    var cliMode = config["MMA_CLI_MODE"] ?? Environment.GetEnvironmentVariable("MMA_CLI_MODE");
+    var isLocalCliMode = string.Equals(cliMode, "local", StringComparison.OrdinalIgnoreCase);
+    var noLocalDb = config.GetValue<bool>("Introspection:NoLocalDb");
+    var allowLoopbackTargets = config.GetValue<bool?>("Introspection:AllowLoopbackTargets")
+        ?? (isLocalCliMode && !noLocalDb);
+    var allowPrivateNetworkTargets = config.GetValue<bool?>("Introspection:AllowPrivateNetworkTargets")
+        ?? (isLocalCliMode && !noLocalDb);
+
+    return new DatabaseTargetPolicyOptions
+    {
+        AllowedOrigins = origins.ToArray(),
+        AllowLoopbackTargets = allowLoopbackTargets,
+        AllowPrivateNetworkTargets = allowPrivateNetworkTargets,
+    };
 });
 builder.Services.AddSingleton<IDnsHostResolver, SystemDnsHostResolver>();
 builder.Services.AddSingleton<IDatabaseTargetPolicy, DatabaseTargetPolicy>();
@@ -73,6 +152,16 @@ builder.Services.AddSingleton<IDatabaseIntrospectionProvider, SqlServerIntrospec
 builder.Services.AddSingleton<IDatabaseIntrospectionService, DatabaseIntrospectionService>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<CliDbContext>();
+    var legacyDbPath = Path.Combine(webRoot, "data", "mma_cli.db");
+    await LegacySqliteMigrator.InitializeAndMigrateAsync(dbContext, legacyDbPath);
+}
+
+app.UseMiddleware<LocalSessionAuthMiddleware>();
+app.MapSessionAndHealthEndpoints();
 
 app.MapPost("/api/db/introspect", async (
     HttpContext context,
