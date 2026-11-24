@@ -1,171 +1,138 @@
 # MMA CLI
 
-![build and test](https://img.shields.io/github/actions/workflow/status/abpframework/abp/build-and-test.yml?branch=dev&style=flat-square)
-[![NuGet](https://img.shields.io/badge/nugett-v4.5.8-blue?style=flat-square)](https://www.nuget.org/packages/mma-cli)
+[![NuGet](https://img.shields.io/nuget/vpre/mma-cli?style=flat-square&label=NuGet)](https://www.nuget.org/packages/mma-cli)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square)](https://dotnet.microsoft.com/download/dotnet/10.0)
+[![License](https://img.shields.io/github/license/mma1979/mma-cli?style=flat-square)](https://github.com/mma1979/mma-cli/blob/main/LICENSE)
 
-![MMA cli](https://i.imgur.com/wxeEDiY.png)
-
-```
-.___  ___. .___  ___.      ___      
-|   \/   | |   \/   |     /   \     
-|  \  /  | |  \  /  |    /  ^  \    
-|  |\/|  | |  |\/|  |   /  /_\  \   
-|  |  |  | |  |  |  |  /  _____  \  
-|__|  |__| |__|  |__| /__/     \__\ 
-                                    
+```text
+.___  ___. .___  ___.      ___
+|   \/   | |   \/   |     /   \
+|  \  /  | |  \  /  |    /  ^  \
+|  |\/|  | |  |\/|  |   /  /_\  \
+|  |  |  | |  |  |  |  /  _____  \
+|__|  |__| |__|  |__| /__/     \__\
 ```
 
-MMA Cli is a complete **Code Generator** based on **ASP.NET Core** to create **modern APIs** by following the software development **best practices** and the **latest technologies**.
+**MMA CLI** is a **.NET 10** code generator and visual schema designer for **ASP.NET Core** APIs. Scaffold clean solutions, design relational schemas visually in **MMA CLI Studio**, reverse-engineer existing databases, and generate entities, DTOs, validators, EF Core configurations, services, and API controllers from one local tool.
 
-# Change Log:
-- Improved migration process and enrich with notifications
-- Databse first mode has been added to `UI` mode using `Import form Database' option
-![MMA cli UI](https://i.imgur.com/ZqG95uM.png)
+![MMA CLI Studio — Visual ERD Designer](https://raw.githubusercontent.com/mma1979/mma-cli/main/docs/images/schema-designer.png)
 
+---
 
-## Getting Started
+## What's New in v10.0.0-preview.1
 
-- [Quick Start](#) is a single-part, quick-start tutorial to create a solution with the `mma cli`. 
-- [Interactive Mode](#) can be used to create and run ABP based solutions with different options and details.
-- [Command Line Mode](#) is a complete tutorial to develop a full stack web application with all aspects of a real-life solution.
-- [UI](#) is a complete tutorial to develop a full stack web application with all aspects of a real-life solution.
+- **.NET 10 Upgrade:** All CLI, shared, BFF, and test projects target `net10.0`.
+- **New MMA CLI Studio (React 19 + ASP.NET Core BFF):** Replaced the legacy Blazor UI with a fast, local-first React + TypeScript web studio served by an embedded ASP.NET Core BFF with per-session token authentication and SQLite persistence.
+- **Solutions Hub:** Register and open existing `.sln`/`.slnx` solutions, scaffold new `AutoMapper` or `Mapster` solutions, or experiment in standalone **Scratchpad** mode.
+- **Visual ERD Designer:** Interactive drag-and-drop canvas with primary/foreign/unique key badges, composite foreign keys, indexes, check constraints, schema validation, and instant SQL/JSON/SVG/PNG export.
+- **Multi-Database Reverse Engineering:** Read-only live introspection for **SQL Server**, **PostgreSQL**, and **MySQL**, plus **SQL Dump / DDL Script** import and an opt-in filter to exclude MMA system tables and audit columns.
+- **Preview & Code Generation:** Dry-run diff of pending entities, properties, and relations with `Applied` sync badges, copyable `mma g ...` commands, and optional EF Core migration scaffolding.
+- **Hardened CLI Launcher:** Upgraded `mma ui` with loopback port selection, `--path`, `--no-browser`, `--no-local-db`, structured error handling, and clean `Ctrl+C` shutdown.
 
-### Quick Start
-Install the `mma-cli`:
+---
 
-````bash
-dotnet tool install --global mma-cli
-````
+## Quick Start
 
-Create a new Solution:
+Install `mma-cli` as a global .NET tool (requires **.NET 10 SDK**):
 
-````bash
-mma new SolutionName
-````
+```bash
+dotnet tool install --global mma-cli --prerelease
+```
 
-you can also use short form
+Create a new ASP.NET Core solution:
 
-````bash
-mma n SolutionName
-````
+```bash
+mma new MySolution
+# or short form with Mapster:
+mma n MySolution --mapper mapster
+```
 
-#### available options.
+Navigate into the solution and launch **MMA CLI Studio**:
 
-`--mapper` tom indecat which object mapping libirary that accept `mapster` or `automapper` and default value is `automapper`
+```bash
+cd MySolution
+mma ui
+```
 
-````bash
-mma n SolutionName --mapper mapster
-````
+---
 
+## MMA CLI Studio (Visual UI)
 
-Now, we need to navigate to the solution folder to start add components.
+```bash
+mma ui
+```
 
-````bash
-cd SolutionName
-````
+### `mma ui` Options
 
-1. Add Entity:
-	````bash
-	mma generate entity MyEntity long
-	# OR
-	mma g e MyEntity long
-	````
+| Option | Description |
+| --- | --- |
+| `-p, --port <port>` | Loopback port to bind (default `5080`; pass `0` to auto-select a free port) |
+| `--path <dir>` | Auto-open or import an existing `.sln`/`.slnx` solution directory |
+| `--no-browser` | Start the local server without automatically opening a browser tab |
+| `--no-local-db` | Disable loopback/private-network live database introspection |
+| `-h, --help` | Display `mma ui` usage and examples |
 
-	generate entity also require `--mapper` value and the default value is `automapper`
+### Solutions Hub
 
-	````bash 
-	mma g e MyEntity long --mapper Mapster
-	````
-	generate property requires `EntityName`,`PK Data type`
+![Solutions Hub](https://raw.githubusercontent.com/mma1979/mma-cli/main/docs/images/solutions-hub.png)
 
-	supported data types:
-	- Guid
-	- int
-	- long
-	- string
-	- decimal
-	- float
-	- bool
-	- DateTime
-	
-	Default data type is `Guid`
+### Database Reverse Engineering & DDL Import
 
-	#### available options.
+![Import from Existing Database](https://raw.githubusercontent.com/mma1979/mma-cli/main/docs/images/import-database.png)
 
-	- `--mapper` tom indecat which object mapping libirary that accept `mapster` or `automapper` and default value is `automapper`
+### Live SQL, JSON & Image Export
 
-	- `--no-api` to skip generaate API controller for this entity.
-	
-2. Add/Remove Property to exsiting Entity
-	````bash
-	mma generate property MyEntity MyProperty long
-	# OR
-	mma g p MyEntity MyProperty long true
-	````
+![Export SQL Modal](https://raw.githubusercontent.com/mma1979/mma-cli/main/docs/images/export-sql.png)
 
-	generate property requires `EntityName`, `PropertyName`, `DataType`
+---
 
-	supported data types:
-	- Guid
-	- int
-	- long
-	- string
-	- decimal
-	- float
-	- bool
-	- DateTime
-	
-	Default data type is `Guid`
+## Command-Line Reference
 
-	#### available options.
+### Create a New Solution
 
-	- `--remove` to remove the property from existing entity
-	   ````bash 
-		mma g p MyEntity MyProperty long true --remove
-		````
+```bash
+mma new <SolutionName> [--mapper automapper|mapster]
+mma n <SolutionName> [--mapper automapper|mapster]
+```
 
-2. Add/Remove relation to exsiting Entities
-	````bash
-	mma generate relation MyParentEntity MyChildEntity ForeignKeyProperty
-	# OR
-	mma g r MyParentEntity MyChildEntity ForeignKeyProperty
-	````
+### Generate an Entity
 
-	generate property requires `Referece Entit Name`, `Child Entity Name`, `ForeignKey PropertyName`
+```bash
+mma generate entity <EntityName> [PrimaryKeyType] [--mapper automapper|mapster] [--no-api]
+mma g e <EntityName> [PrimaryKeyType] [--mapper automapper|mapster] [--no-api]
+```
 
+Supported data types (default: `Guid`):
+`Guid`, `int`, `long`, `string`, `decimal`, `float`, `bool`, `DateTime`
 
-	#### available options.
+- `--mapper`: `automapper` (default) or `mapster`
+- `--no-api`: Skip generating the API controller for this entity
 
-	- `--remove` to remove the property from existing entity
-	   ````bash 
-		mma g r MyParentEntity MyChildEntity ForeignKeyProperty --remove
-		````
+### Add or Remove a Property
 
+```bash
+mma generate property <EntityName> <PropertyName> <DataType> [IsNullable] [--remove]
+mma g p <EntityName> <PropertyName> <DataType> [IsNullable] [--remove]
+```
+
+### Add or Remove a Relation
+
+```bash
+mma generate relation <ParentEntity> <ChildEntity> <ForeignKeyProperty> [--remove]
+mma g r <ParentEntity> <ChildEntity> <ForeignKeyProperty> [--remove]
+```
 
 ### Interactive Mode
 
-You can use interactive mode by enter command `mma` without any arguments in solution path
+Run `mma` with no arguments inside a solution folder to use the interactive prompt:
 
-![image](https://i.imgur.com/DpTWnj2.gif)
+```bash
+mma
+```
 
-### UI
+---
 
-Also you can use UI mode to create and manage your solutions. Select `UI` from `Interactive` or execute `mma ui`
+## Links
 
-> Thanks to [Radzen](https://blazor.radzen.com/)
-
-````bash
-mma ui
-````
-
-![UI Screen 1](https://i.imgur.com/wE6nXWF.png)
-
-![UI Screen 2](https://i.imgur.com/ARweSJu.png)
-
-![UI Screen 3](https://i.imgur.com/5BxbvkC.png)
-
-![UI Screen 4](https://i.imgur.com/iMnGJcx.png)
-
-![UI Screen 5](https://i.imgur.com/eYiSLBS.png)
-
-![UI Screen 6](https://i.imgur.com/CS8PQE2.png)
+- **Source Repository:** https://github.com/mma1979/mma-cli
+- **Issues & Feedback:** https://github.com/mma1979/mma-cli/issues

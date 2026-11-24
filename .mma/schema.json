@@ -1,0 +1,9 @@
+{
+  "id": "project-1",
+  "name": "Mma.Cli",
+  "engine": "mssql",
+  "description": "MMA CLI solution at D:\\workspaces\\my\\mma-cli",
+  "updatedAt": "2026-11-24T14:43:39.4306821Z",
+  "tables": [],
+  "relations": []
+}
