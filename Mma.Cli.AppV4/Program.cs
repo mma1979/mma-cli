@@ -1,5 +1,6 @@
 ﻿using CliWrap;
 
+using Mma.Cli.AppV4;
 using Mma.Cli.Shared.Builders;
 using Mma.Cli.Shared.Consts;
 using Mma.Cli.Shared.Exceptions;
@@ -69,7 +70,7 @@ public class Program
         {
             CommandsFlags.New or CommandsFlags.NewShortHand => HandleNewCommand(args),
             CommandsFlags.Generate or CommandsFlags.GenerateShortHand => HandleGenerateCommand(args),
-            CommandsFlags.UI => await HandleUICommand(),
+            CommandsFlags.UI => await HandleUICommand(args),
             CommandsFlags.Import => HandleImportCommand(args),
             CommandsFlags.Help or CommandsFlags.HelpShortHand => HandleHelpCommand(),
             CommandsFlags.Version or CommandsFlags.VersionShortHand => HandleVersionCommand(),
@@ -164,30 +165,8 @@ public class Program
         return 0;
     }
 
-    private static async Task<int> HandleUICommand()
-    {
-        try
-        {
-            var executablePath = BuildHelper.GetExecutablePath();
-
-            await CliWrap.Cli.Wrap("dotnet")
-                .WithWorkingDirectory(Path.Combine(executablePath, "UI"))
-                .WithArguments("cli-ui.dll")
-                .WithStandardOutputPipe(PipeTarget.ToDelegate(_ => {
-                    Console.Clear();
-                    Output.Success("Now listening on: http://localhost:5000");
-                }))
-                .WithStandardErrorPipe(PipeTarget.ToDelegate(Output.Error))
-                .ExecuteAsync(ShutdownCts.Token);
-
-            return 0;
-        }
-        catch (Exception ex)
-        {
-            Output.Error($"UI execution failed: {ex.Message}");
-            return -1;
-        }
-    }
+    private static Task<int> HandleUICommand(string[] args) =>
+        UiLauncher.RunAsync(args, ShutdownCts.Token);
 
     private static int HandleHelpCommand()
     {
@@ -234,7 +213,7 @@ public class Program
         {
             Commands.NEW => HandleInteractiveNew(),
             Commands.GENERATE => HandleInteractiveGenerate(),
-            Commands.UI => await HandleUICommand(),
+            Commands.UI => await HandleUICommand(["ui"]),
             Commands.WATCH => HandleWatch(),
             _ => HandleInvalidCommand()
         };

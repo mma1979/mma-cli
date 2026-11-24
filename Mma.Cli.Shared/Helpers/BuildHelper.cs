@@ -101,6 +101,7 @@ AUTHOR:
 COMMANDS:
    new, n       create a new solution in the current directory
    generate, g  create a new Component in the current solution
+   ui           launch MMA CLI Studio visual schema designer (mma ui --help)
    help, h      Shows a list of commands or help for one command
 
 COMMAND OPTIONS:
