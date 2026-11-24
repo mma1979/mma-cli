@@ -1,0 +1,6 @@
+{
+  "name": "SchemaForge",
+  "description": "Professional interactive database schema designer with drag-and-drop tables, dynamic relation routing, property management, and SQL/JSON export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

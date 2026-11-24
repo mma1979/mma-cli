@@ -364,3 +364,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# MMA CLI Web & BFF generated static assets
+Mma.Cli.Bff/wwwroot/
+Mma.Cli.Web/node_modules/
+Mma.Cli.Web/dist/
+Mma.Cli.AppV4/UI/

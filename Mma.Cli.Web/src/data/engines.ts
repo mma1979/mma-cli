@@ -1,0 +1,563 @@
+import { isDatabaseEngineSupported } from '../config/featureFlags';
+import {
+  Column,
+  DatabaseEngine,
+  MysqlStorageEngine,
+  ReferentialAction,
+  SchemaModel,
+} from '../types/schema';
+
+export interface EngineProfile {
+  id: DatabaseEngine;
+  label: string;
+  shortLabel: string;
+  description: string;
+  defaultSchema: string;
+  supportsSchemaNamespace: boolean;
+  supportsStorageEngine: boolean;
+  autoIncrementLabel: string;
+  autoIncrementHint: string;
+  identifierQuotes: [string, string];
+  defaultIdType: string;
+  defaultIdDefault: string;
+  defaultIdAutoIncrement: boolean;
+  defaultTimestampType: string;
+  defaultTimestampDefault: string;
+  defaultStringType: string;
+  dataTypes: string[];
+  referentialActions: ReferentialAction[];
+}
+
+export const MYSQL_STORAGE_ENGINES: MysqlStorageEngine[] = ['InnoDB', 'MyISAM', 'MEMORY'];
+export const MYSQL_CHARSETS: string[] = ['utf8mb4', 'utf8mb3', 'latin1', 'ascii'];
+
+export const ENGINE_PROFILES: Record<DatabaseEngine, EngineProfile> = {
+  postgresql: {
+    id: 'postgresql',
+    label: 'PostgreSQL',
+    shortLabel: 'PostgreSQL',
+    description: 'Supports schemas, UUID, JSONB, SERIAL/BIGSERIAL, and TIMESTAMPTZ.',
+    defaultSchema: 'public',
+    supportsSchemaNamespace: true,
+    supportsStorageEngine: false,
+    autoIncrementLabel: 'SERIAL',
+    autoIncrementHint: 'Maps integer PK to SERIAL / BIGSERIAL',
+    identifierQuotes: ['"', '"'],
+    defaultIdType: 'uuid',
+    defaultIdDefault: 'gen_random_uuid()',
+    defaultIdAutoIncrement: false,
+    defaultTimestampType: 'timestamptz',
+    defaultTimestampDefault: 'now()',
+    defaultStringType: 'varchar(255)',
+    dataTypes: [
+      'uuid',
+      'serial',
+      'bigserial',
+      'integer',
+      'bigint',
+      'smallint',
+      'varchar(255)',
+      'varchar(120)',
+      'varchar(64)',
+      'text',
+      'boolean',
+      'numeric(10,2)',
+      'decimal(12,4)',
+      'double precision',
+      'timestamp',
+      'timestamptz',
+      'date',
+      'jsonb',
+      'json',
+      'bytea',
+      'inet',
+      'text[]',
+    ],
+    referentialActions: ['CASCADE', 'SET NULL', 'SET DEFAULT', 'RESTRICT', 'NO ACTION'],
+  },
+  mssql: {
+    id: 'mssql',
+    label: 'MSSQL',
+    shortLabel: 'MSSQL',
+    description: 'SQL Server T-SQL with dbo schema, NVARCHAR, UNIQUEIDENTIFIER, and IDENTITY(1,1).',
+    defaultSchema: 'dbo',
+    supportsSchemaNamespace: true,
+    supportsStorageEngine: false,
+    autoIncrementLabel: 'IDENTITY',
+    autoIncrementHint: 'Emits IDENTITY(1,1) on integer columns',
+    identifierQuotes: ['[', ']'],
+    defaultIdType: 'UNIQUEIDENTIFIER',
+    defaultIdDefault: 'NEWID()',
+    defaultIdAutoIncrement: false,
+    defaultTimestampType: 'DATETIMEOFFSET',
+    defaultTimestampDefault: 'SYSDATETIMEOFFSET()',
+    defaultStringType: 'NVARCHAR(255)',
+    dataTypes: [
+      'UNIQUEIDENTIFIER',
+      'INT',
+      'BIGINT',
+      'SMALLINT',
+      'TINYINT',
+      'NVARCHAR(255)',
+      'NVARCHAR(120)',
+      'NVARCHAR(64)',
+      'NVARCHAR(MAX)',
+      'VARCHAR(255)',
+      'CHAR(36)',
+      'BIT',
+      'DECIMAL(10,2)',
+      'NUMERIC(10,2)',
+      'MONEY',
+      'FLOAT',
+      'DATETIME2',
+      'DATETIMEOFFSET',
+      'DATE',
+      'VARBINARY(MAX)',
+      'XML',
+    ],
+    // SQL Server does not support ON DELETE/UPDATE RESTRICT; NO ACTION is standard
+    referentialActions: ['CASCADE', 'SET NULL', 'SET DEFAULT', 'NO ACTION'],
+  },
+  mysql: {
+    id: 'mysql',
+    label: 'MySQL',
+    shortLabel: 'MySQL',
+    description: 'Supports InnoDB storage engine, utf8mb4 charset, AUTO_INCREMENT, and JSON.',
+    defaultSchema: '',
+    supportsSchemaNamespace: false,
+    supportsStorageEngine: true,
+    autoIncrementLabel: 'AUTO_INC',
+    autoIncrementHint: 'Emits AUTO_INCREMENT on integer columns',
+    identifierQuotes: ['`', '`'],
+    defaultIdType: 'CHAR(36)',
+    defaultIdDefault: '(UUID())',
+    defaultIdAutoIncrement: false,
+    defaultTimestampType: 'TIMESTAMP',
+    defaultTimestampDefault: 'CURRENT_TIMESTAMP',
+    defaultStringType: 'VARCHAR(255)',
+    dataTypes: [
+      'CHAR(36)',
+      'INT',
+      'BIGINT',
+      'SMALLINT',
+      'TINYINT',
+      'TINYINT(1)',
+      'VARCHAR(255)',
+      'VARCHAR(120)',
+      'VARCHAR(64)',
+      'TEXT',
+      'MEDIUMTEXT',
+      'LONGTEXT',
+      'DECIMAL(10,2)',
+      'DOUBLE',
+      'FLOAT',
+      'DATETIME',
+      'TIMESTAMP',
+      'DATE',
+      'JSON',
+      'LONGBLOB',
+    ],
+    referentialActions: ['CASCADE', 'SET NULL', 'SET DEFAULT', 'RESTRICT', 'NO ACTION'],
+  },
+  general: {
+    id: 'general',
+    label: 'General',
+    shortLabel: 'General',
+    description: 'Portable ANSI SQL types and standard identity/constraint syntax.',
+    defaultSchema: '',
+    supportsSchemaNamespace: true,
+    supportsStorageEngine: false,
+    autoIncrementLabel: 'IDENTITY',
+    autoIncrementHint: 'Emits GENERATED BY DEFAULT AS IDENTITY',
+    identifierQuotes: ['"', '"'],
+    defaultIdType: 'VARCHAR(36)',
+    defaultIdDefault: '',
+    defaultIdAutoIncrement: false,
+    defaultTimestampType: 'TIMESTAMP',
+    defaultTimestampDefault: 'CURRENT_TIMESTAMP',
+    defaultStringType: 'VARCHAR(255)',
+    dataTypes: [
+      'VARCHAR(36)',
+      'INTEGER',
+      'BIGINT',
+      'SMALLINT',
+      'VARCHAR(255)',
+      'VARCHAR(120)',
+      'VARCHAR(64)',
+      'TEXT',
+      'BOOLEAN',
+      'DECIMAL(10,2)',
+      'NUMERIC(10,2)',
+      'DOUBLE PRECISION',
+      'TIMESTAMP',
+      'DATE',
+      'BLOB',
+    ],
+    referentialActions: ['CASCADE', 'SET NULL', 'SET DEFAULT', 'RESTRICT', 'NO ACTION'],
+  },
+};
+
+export const ENGINE_LIST: EngineProfile[] = [
+  ENGINE_PROFILES.postgresql,
+  ENGINE_PROFILES.mssql,
+  ENGINE_PROFILES.mysql,
+  ENGINE_PROFILES.general,
+];
+
+export const SUPPORTED_ENGINE_LIST: EngineProfile[] = ENGINE_LIST.filter((profile) =>
+  isDatabaseEngineSupported(profile.id)
+);
+
+type CanonicalType =
+  | { kind: 'uuid' }
+  | { kind: 'bigserial' }
+  | { kind: 'serial' }
+  | { kind: 'bigint' }
+  | { kind: 'int' }
+  | { kind: 'smallint' }
+  | { kind: 'tinyint' }
+  | { kind: 'boolean' }
+  | { kind: 'varchar'; length: string }
+  | { kind: 'char'; length: string }
+  | { kind: 'text' }
+  | { kind: 'decimal'; precision: string }
+  | { kind: 'float' }
+  | { kind: 'timestamptz' }
+  | { kind: 'timestamp' }
+  | { kind: 'date' }
+  | { kind: 'json' }
+  | { kind: 'binary' }
+  | { kind: 'raw'; raw: string };
+
+function classifyColumnType(rawType: string, isAutoIncrement: boolean): CanonicalType {
+  const trimmed = (rawType || 'text').trim();
+  const lower = trimmed.toLowerCase();
+
+  // UUID / GUID
+  if (lower === 'uuid' || lower === 'uniqueidentifier' || lower === 'char(36)' || lower === 'varchar(36)') {
+    return { kind: 'uuid' };
+  }
+
+  // Serials / Auto-increment integers
+  if (lower === 'bigserial' || (isAutoIncrement && lower === 'bigint')) {
+    return { kind: 'bigserial' };
+  }
+  if (lower === 'serial' || (isAutoIncrement && (lower === 'int' || lower === 'integer'))) {
+    return { kind: 'serial' };
+  }
+
+  // Boolean (check TINYINT(1) before generic tinyint)
+  if (lower === 'boolean' || lower === 'bool' || lower === 'bit' || lower === 'tinyint(1)') {
+    return { kind: 'boolean' };
+  }
+
+  // Integers
+  if (lower === 'bigint') return { kind: 'bigint' };
+  if (lower === 'integer' || lower === 'int') return { kind: 'int' };
+  if (lower === 'smallint') return { kind: 'smallint' };
+  if (lower === 'tinyint') return { kind: 'tinyint' };
+
+  // JSON
+  if (lower === 'jsonb' || lower === 'json') return { kind: 'json' };
+
+  // Text / Max Strings
+  if (
+    lower === 'text' ||
+    lower === 'mediumtext' ||
+    lower === 'longtext' ||
+    lower === 'nvarchar(max)' ||
+    lower === 'varchar(max)'
+  ) {
+    return { kind: 'text' };
+  }
+
+  // Varchar / NVarchar with length
+  const varcharMatch = lower.match(/^n?varchar\s*\((\d+)\)$/);
+  if (varcharMatch) {
+    return { kind: 'varchar', length: varcharMatch[1] };
+  }
+
+  // Char with length
+  const charMatch = lower.match(/^n?char\s*\((\d+)\)$/);
+  if (charMatch) {
+    return { kind: 'char', length: charMatch[1] };
+  }
+
+  // Decimal / Numeric / Money
+  const decMatch = lower.match(/^(?:numeric|decimal)\s*\(([^)]+)\)$/);
+  if (decMatch) {
+    return { kind: 'decimal', precision: decMatch[1] };
+  }
+  if (lower === 'money') {
+    return { kind: 'decimal', precision: '12,2' };
+  }
+
+  // Float / Double
+  if (lower === 'double precision' || lower === 'double' || lower === 'float' || lower === 'real') {
+    return { kind: 'float' };
+  }
+
+  // Temporal
+  if (lower === 'timestamptz' || lower === 'datetimeoffset') {
+    return { kind: 'timestamptz' };
+  }
+  if (lower === 'timestamp' || lower === 'datetime' || lower === 'datetime2') {
+    return { kind: 'timestamp' };
+  }
+  if (lower === 'date') {
+    return { kind: 'date' };
+  }
+
+  // Binary
+  if (lower === 'bytea' || lower === 'blob' || lower === 'longblob' || lower === 'varbinary(max)') {
+    return { kind: 'binary' };
+  }
+
+  return { kind: 'raw', raw: trimmed };
+}
+
+export function formatTypeForEngine(
+  rawType: string,
+  isAutoIncrement: boolean,
+  targetEngine: DatabaseEngine
+): { type: string; isAutoIncrement: boolean } {
+  const canonical = classifyColumnType(rawType, isAutoIncrement);
+
+  switch (canonical.kind) {
+    case 'uuid':
+      if (targetEngine === 'postgresql') return { type: 'uuid', isAutoIncrement: false };
+      if (targetEngine === 'mssql') return { type: 'UNIQUEIDENTIFIER', isAutoIncrement: false };
+      if (targetEngine === 'mysql') return { type: 'CHAR(36)', isAutoIncrement: false };
+      return { type: 'VARCHAR(36)', isAutoIncrement: false };
+
+    case 'bigserial':
+      if (targetEngine === 'postgresql') return { type: 'bigserial', isAutoIncrement: true };
+      return { type: 'BIGINT', isAutoIncrement: true };
+
+    case 'serial':
+      if (targetEngine === 'postgresql') return { type: 'serial', isAutoIncrement: true };
+      if (targetEngine === 'general') return { type: 'INTEGER', isAutoIncrement: true };
+      return { type: 'INT', isAutoIncrement: true };
+
+    case 'bigint':
+      return {
+        type: targetEngine === 'postgresql' ? 'bigint' : 'BIGINT',
+        isAutoIncrement,
+      };
+
+    case 'int':
+      if (targetEngine === 'postgresql') return { type: 'integer', isAutoIncrement };
+      if (targetEngine === 'general') return { type: 'INTEGER', isAutoIncrement };
+      return { type: 'INT', isAutoIncrement };
+
+    case 'smallint':
+      return {
+        type: targetEngine === 'postgresql' ? 'smallint' : 'SMALLINT',
+        isAutoIncrement,
+      };
+
+    case 'tinyint':
+      if (targetEngine === 'postgresql' || targetEngine === 'general') {
+        return { type: targetEngine === 'postgresql' ? 'smallint' : 'SMALLINT', isAutoIncrement };
+      }
+      return { type: 'TINYINT', isAutoIncrement };
+
+    case 'boolean':
+      if (targetEngine === 'postgresql') return { type: 'boolean', isAutoIncrement: false };
+      if (targetEngine === 'mssql') return { type: 'BIT', isAutoIncrement: false };
+      if (targetEngine === 'mysql') return { type: 'TINYINT(1)', isAutoIncrement: false };
+      return { type: 'BOOLEAN', isAutoIncrement: false };
+
+    case 'varchar':
+      if (targetEngine === 'postgresql') {
+        return { type: `varchar(${canonical.length})`, isAutoIncrement: false };
+      }
+      if (targetEngine === 'mssql') {
+        return { type: `NVARCHAR(${canonical.length})`, isAutoIncrement: false };
+      }
+      return { type: `VARCHAR(${canonical.length})`, isAutoIncrement: false };
+
+    case 'char':
+      if (targetEngine === 'postgresql') {
+        return { type: `char(${canonical.length})`, isAutoIncrement: false };
+      }
+      if (targetEngine === 'mssql') {
+        return { type: `NCHAR(${canonical.length})`, isAutoIncrement: false };
+      }
+      return { type: `CHAR(${canonical.length})`, isAutoIncrement: false };
+
+    case 'text':
+      if (targetEngine === 'postgresql') return { type: 'text', isAutoIncrement: false };
+      if (targetEngine === 'mssql') return { type: 'NVARCHAR(MAX)', isAutoIncrement: false };
+      return { type: 'TEXT', isAutoIncrement: false };
+
+    case 'decimal':
+      if (targetEngine === 'postgresql') {
+        return { type: `numeric(${canonical.precision})`, isAutoIncrement: false };
+      }
+      return { type: `DECIMAL(${canonical.precision})`, isAutoIncrement: false };
+
+    case 'float':
+      if (targetEngine === 'postgresql') return { type: 'double precision', isAutoIncrement: false };
+      if (targetEngine === 'mssql') return { type: 'FLOAT', isAutoIncrement: false };
+      if (targetEngine === 'mysql') return { type: 'DOUBLE', isAutoIncrement: false };
+      return { type: 'DOUBLE PRECISION', isAutoIncrement: false };
+
+    case 'timestamptz':
+      if (targetEngine === 'postgresql') return { type: 'timestamptz', isAutoIncrement: false };
+      if (targetEngine === 'mssql') return { type: 'DATETIMEOFFSET', isAutoIncrement: false };
+      return { type: 'TIMESTAMP', isAutoIncrement: false };
+
+    case 'timestamp':
+      if (targetEngine === 'postgresql') return { type: 'timestamp', isAutoIncrement: false };
+      if (targetEngine === 'mssql') return { type: 'DATETIME2', isAutoIncrement: false };
+      if (targetEngine === 'mysql') return { type: 'DATETIME', isAutoIncrement: false };
+      return { type: 'TIMESTAMP', isAutoIncrement: false };
+
+    case 'date':
+      return {
+        type: targetEngine === 'postgresql' ? 'date' : 'DATE',
+        isAutoIncrement: false,
+      };
+
+    case 'json':
+      if (targetEngine === 'postgresql') return { type: 'jsonb', isAutoIncrement: false };
+      if (targetEngine === 'mssql') return { type: 'NVARCHAR(MAX)', isAutoIncrement: false };
+      if (targetEngine === 'mysql') return { type: 'JSON', isAutoIncrement: false };
+      return { type: 'TEXT', isAutoIncrement: false };
+
+    case 'binary':
+      if (targetEngine === 'postgresql') return { type: 'bytea', isAutoIncrement: false };
+      if (targetEngine === 'mssql') return { type: 'VARBINARY(MAX)', isAutoIncrement: false };
+      if (targetEngine === 'mysql') return { type: 'LONGBLOB', isAutoIncrement: false };
+      return { type: 'BLOB', isAutoIncrement: false };
+
+    case 'raw':
+      return { type: canonical.raw, isAutoIncrement };
+  }
+}
+
+export function convertDefaultValueForEngine(
+  defaultVal: string,
+  targetEngine: DatabaseEngine
+): string {
+  const trimmed = defaultVal.trim();
+  if (!trimmed) return '';
+  const lower = trimmed.toLowerCase();
+
+  // UUID generation functions
+  if (lower === 'gen_random_uuid()' || lower === 'newid()' || lower === '(uuid())' || lower === 'uuid()') {
+    if (targetEngine === 'postgresql') return 'gen_random_uuid()';
+    if (targetEngine === 'mssql') return 'NEWID()';
+    if (targetEngine === 'mysql') return '(UUID())';
+    return '';
+  }
+
+  // Current timestamp functions
+  if (
+    lower === 'now()' ||
+    lower === 'current_timestamp' ||
+    lower === 'sysdatetimeoffset()' ||
+    lower === 'getutcdate()' ||
+    lower === 'getdate()'
+  ) {
+    if (targetEngine === 'postgresql') return 'now()';
+    if (targetEngine === 'mssql') return 'SYSDATETIMEOFFSET()';
+    return 'CURRENT_TIMESTAMP';
+  }
+
+  // Boolean literals
+  if (lower === 'true') {
+    if (targetEngine === 'mssql' || targetEngine === 'mysql') return '1';
+    return 'true';
+  }
+  if (lower === 'false') {
+    if (targetEngine === 'mssql' || targetEngine === 'mysql') return '0';
+    return 'false';
+  }
+
+  // JSON empty object default
+  if (lower === "'{}'::jsonb" || lower === "'{}'" || lower === "('{}')") {
+    if (targetEngine === 'postgresql') return "'{}'::jsonb";
+    if (targetEngine === 'mysql') return '';
+    return "'{}'";
+  }
+
+  return trimmed;
+}
+
+function convertReferentialAction(
+  action: ReferentialAction,
+  targetEngine: DatabaseEngine
+): ReferentialAction {
+  const allowed = ENGINE_PROFILES[targetEngine].referentialActions;
+  if (allowed.includes(action)) return action;
+  return 'NO ACTION';
+}
+
+const DEFAULT_ENGINE_SCHEMAS = new Set(['', 'public', 'dbo']);
+
+/**
+ * Converts an entire SchemaModel's data types, default expressions, table schema/storage
+ * settings, and referential actions to match the newly selected database engine.
+ */
+export function convertSchemaToEngine(
+  schema: SchemaModel,
+  targetEngine: DatabaseEngine
+): SchemaModel {
+  if (schema.engine === targetEngine) return schema;
+
+  const profile = ENGINE_PROFILES[targetEngine];
+
+  const tables = schema.tables.map((table) => {
+    const nextSchema = DEFAULT_ENGINE_SCHEMAS.has((table.schema || '').trim().toLowerCase())
+      ? profile.defaultSchema
+      : profile.supportsSchemaNamespace
+      ? table.schema
+      : '';
+
+    const columns: Column[] = table.columns.map((col) => {
+      const convertedType = formatTypeForEngine(col.type, col.isAutoIncrement, targetEngine);
+      const convertedDefault = convertDefaultValueForEngine(col.defaultValue, targetEngine);
+
+      // Handle boolean literal 1/0 back to true/false when column is boolean
+      let finalDefault = convertedDefault;
+      const canonical = classifyColumnType(col.type, col.isAutoIncrement);
+      if (canonical.kind === 'boolean') {
+        if (convertedDefault === '1' && (targetEngine === 'postgresql' || targetEngine === 'general')) {
+          finalDefault = 'true';
+        } else if (convertedDefault === '0' && (targetEngine === 'postgresql' || targetEngine === 'general')) {
+          finalDefault = 'false';
+        }
+      }
+
+      return {
+        ...col,
+        type: convertedType.type,
+        isAutoIncrement: convertedType.isAutoIncrement,
+        defaultValue: finalDefault,
+      };
+    });
+
+    return {
+      ...table,
+      schema: nextSchema,
+      storageEngine: targetEngine === 'mysql' ? table.storageEngine || 'InnoDB' : undefined,
+      charset: targetEngine === 'mysql' ? table.charset || 'utf8mb4' : undefined,
+      columns,
+    };
+  });
+
+  const relations = schema.relations.map((rel) => ({
+    ...rel,
+    onDelete: convertReferentialAction(rel.onDelete, targetEngine),
+    onUpdate: convertReferentialAction(rel.onUpdate, targetEngine),
+  }));
+
+  return {
+    ...schema,
+    engine: targetEngine,
+    tables,
+    relations,
+  };
+}
