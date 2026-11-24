@@ -2,16 +2,17 @@
 
 using Mma.Cli.Shared.Builders;
 using Mma.Cli.Shared.Consts;
+using Mma.Cli.Shared.Exceptions;
 using Mma.Cli.Shared.Helpers;
 
 using Sharprompt;
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 public class Program
@@ -19,47 +20,44 @@ public class Program
     private static readonly string Version = Assembly.GetEntryAssembly()!
         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unknown";
 
-    static async Task Main(string[] args)
+    private static readonly CancellationTokenSource ShutdownCts = new();
+
+    static async Task<int> Main(string[] args)
     {
         Console.CancelKeyPress += OnCancelKeyPress;
 
         try
         {
-            var exitCode = args.Length > 0
+            return args.Length > 0
                 ? await HandleCommandLineAsync(args)
                 : await HandleInteractiveModeAsync();
-
-            Environment.Exit(exitCode);
+        }
+        catch (OperationCanceledException) when (ShutdownCts.IsCancellationRequested)
+        {
+            return 0;
+        }
+        catch (MmaCliException ex)
+        {
+            Output.Error($"[{ex.Code}] {ex.Message}");
+            return ex.ExitCode;
         }
         catch (Exception ex)
         {
             Output.Error($"An error occurred: {ex.Message}");
-            Environment.Exit(-1);
+            return 1;
+        }
+        finally
+        {
+            Console.CancelKeyPress -= OnCancelKeyPress;
         }
     }
 
-    private static void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
+    private static void OnCancelKeyPress(object? sender, ConsoleCancelEventArgs e)
     {
-        KillProcessesByName("dotnet", "mma-cli");
-    }
-
-    private static void KillProcessesByName(params string[] processNames)
-    {
-        foreach (var processName in processNames)
+        if (!ShutdownCts.IsCancellationRequested)
         {
-            try
-            {
-                var processes = Process.GetProcessesByName(processName);
-                foreach (var process in processes)
-                {
-                    process.Kill();
-                    process.Dispose();
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to kill {processName}: {ex.Message}");
-            }
+            e.Cancel = true;
+            ShutdownCts.Cancel();
         }
     }
 
@@ -180,7 +178,7 @@ public class Program
                     Output.Success("Now listening on: http://localhost:5000");
                 }))
                 .WithStandardErrorPipe(PipeTarget.ToDelegate(Output.Error))
-                .ExecuteAsync();
+                .ExecuteAsync(ShutdownCts.Token);
 
             return 0;
         }

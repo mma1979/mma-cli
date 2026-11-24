@@ -1,4 +1,5 @@
-﻿using Mma.Cli.Shared.Helpers;
+﻿using Mma.Cli.Shared.Exceptions;
+using Mma.Cli.Shared.Helpers;
 using Mma.Cli.Shared.Models;
 using Newtonsoft.Json;
 
@@ -18,16 +19,22 @@ namespace Mma.Cli.Shared.Builders
         public string SolutionPath { get; private set; } = "";
         public string SolutionName { get; private set; } = "";
         public string ProjectsPath { get; private set; } = "";
-        private const string BaseUrl = "https://localhost:44357";// "http://localhost:5000";
+        private const string BaseUrl = "http://127.0.0.1:5080";
 
         public ImportFactory()
         {
-
-            ServicePointManager.ServerCertificateValidationCallback += (sender, certificate, chain, sslPolicyErrors) => true;
         }
 
         public static ImportFactory New(string[] args)
         {
+            if (args.Length < 2 || string.IsNullOrWhiteSpace(args[1]))
+            {
+                throw new MmaCliException(
+                    "invalid_arguments",
+                    "Import command requires a solution path.",
+                    exitCode: 2);
+            }
+
             var factory = new ImportFactory()
             {
                 SolutionPath = args[1],
@@ -41,9 +48,18 @@ namespace Mma.Cli.Shared.Builders
         public ImportFactory Import()
         {
 
-            var mmaProjectPah = Path.Combine(SolutionPath, ".mma", "project.mma");
-            var json = File.ReadAllText(mmaProjectPah, Encoding.UTF8);
-            var body = JsonConvert.DeserializeObject<ProjectDumpModel>(json)!;
+            var mmaProjectPath = Path.Combine(SolutionPath, ".mma", "project.mma");
+            if (!File.Exists(mmaProjectPath))
+            {
+                throw new MmaCliException(
+                    "missing_mma_project",
+                    $"Could not find '{mmaProjectPath}'.",
+                    exitCode: 66);
+            }
+
+            var json = File.ReadAllText(mmaProjectPath, Encoding.UTF8);
+            var body = JsonConvert.DeserializeObject<ProjectDumpModel>(json)
+                ?? throw new MmaCliException("invalid_mma_project", "Failed to deserialize project.mma.", exitCode: 1);
 
             var client = new RestClient(BaseUrl);
             var request = new RestRequest("api/projects/import", Method.Post);
@@ -51,21 +67,17 @@ namespace Mma.Cli.Shared.Builders
             request.AddJsonBody(body, ContentType.Json);
             var response = client.Execute(request);
 
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
+            if (response.StatusCode != HttpStatusCode.OK)
             {
-                Console.WriteLine(response.ErrorException);
-                Output.Error("Faild to Export Project");
-                Environment.Exit(-1);
-                return this;
+                throw new MmaCliException(
+                    "import_failed",
+                    $"Failed to import project: {response.ErrorMessage ?? response.StatusCode.ToString()}",
+                    exitCode: 1,
+                    response.ErrorException);
             }
 
-            Output.Success("Project has exported successfuly");
-            Environment.Exit(0);
+            Output.Success("Project has been imported successfully");
             return this;
         }
-
-        
-
-
     }
 }

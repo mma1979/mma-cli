@@ -1,4 +1,5 @@
 ﻿using Mma.Cli.Shared.Consts;
+using Mma.Cli.Shared.Exceptions;
 
 using System;
 using System.Collections.Generic;
@@ -46,19 +47,28 @@ namespace Mma.Cli.Shared.Helpers
 
         public static (string solutionName, string projectsPath) CheckSolutionPath(string solutionPath)
         {
-            var sln = Directory.GetFiles(solutionPath, "*.sln", SearchOption.TopDirectoryOnly);
-            if (sln.Length <= 0)
+            if (string.IsNullOrWhiteSpace(solutionPath) || !Directory.Exists(solutionPath))
             {
-                Output.Error(
-                    "ERROR: The current working directory does not contain a solution file");
-
-                Environment.Exit(-1);
-
-                return (string.Empty, string.Empty);
+                throw new MmaCliException(
+                    "invalid_solution_path",
+                    $"The directory '{solutionPath}' does not exist.",
+                    exitCode: 66);
             }
 
-            var slnName = new FileInfo(sln[0]).Name;
-            var solutionName = slnName.AsSpan(0, slnName.Length - 4).ToString();
+            var sln = Directory.GetFiles(solutionPath, "*.sln", SearchOption.TopDirectoryOnly)
+                .Concat(Directory.GetFiles(solutionPath, "*.slnx", SearchOption.TopDirectoryOnly))
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (sln.Length <= 0)
+            {
+                throw new MmaCliException(
+                    "invalid_solution_path",
+                    $"The directory '{solutionPath}' does not contain a .sln or .slnx solution file.",
+                    exitCode: 66);
+            }
+
+            var solutionName = Path.GetFileNameWithoutExtension(sln[0]);
             var projectsPath = Path.Combine(solutionPath, solutionName);
 
             return (solutionName, projectsPath);
@@ -126,7 +136,6 @@ GLOBAL OPTIONS:
    --version, -v  Print the version
 
 """);
-            Environment.Exit(0);
         }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using Mma.Cli.Shared.Consts;
+using Mma.Cli.Shared.Exceptions;
 using Mma.Cli.Shared.Helpers;
 
 using System;
@@ -31,11 +32,12 @@ namespace Mma.Cli.Shared.Builders
 
         public static RelationsBuilder New(string[] args)
         {
-            if (args.Length < 5)
+            if (args.Length < 6)
             {
-                Output.Error("Not enough arguments use mma -h to get help");
-                Environment.Exit(-1);
-                return null;
+                throw new MmaCliException(
+                    "invalid_arguments",
+                    "Not enough arguments. Use `mma -h` to get help.",
+                    exitCode: 2);
             }
 
             var builder = new RelationsBuilder
@@ -55,11 +57,12 @@ namespace Mma.Cli.Shared.Builders
 
         public static RelationsBuilder New(string[] args, string solutionPath)
         {
-            if (args.Length < 5)
+            if (args.Length < 6)
             {
-                Output.Error("Not enough arguments use mma -h to get help");
-                Environment.Exit(-1);
-                return null;
+                throw new MmaCliException(
+                    "invalid_arguments",
+                    "Not enough arguments. Use `mma -h` to get help.",
+                    exitCode: 2);
             }
 
             var builder = new RelationsBuilder(solutionPath)
