@@ -8,6 +8,7 @@ import {
   Plus,
   Table2,
 } from 'lucide-react';
+import { EntitySyncStatus } from '../types/mma';
 import {
   PendingConnection,
   Relation,
@@ -39,6 +40,7 @@ interface CanvasProps {
   showInspector: boolean;
   theme: 'light' | 'dark';
   validation: SchemaValidationResult;
+  entitySyncMap?: Map<string, EntitySyncStatus>;
   onViewportChange: (next: ViewportState) => void;
   onSelect: (selection: SelectionState) => void;
   onMoveTableLive: (tableId: string, x: number, y: number) => void;
@@ -122,6 +124,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onToggleOutline,
   onToggleInspector,
   canvasContainerRef,
+  entitySyncMap,
 }) => {
   const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
   const [showMinimap, setShowMinimap] = useState(false);
@@ -646,6 +649,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             fkColumnIds={fkColumnsByTable.get(table.id) ?? new Set()}
             activeColumnPorts={activePortsByTable.get(table.id) ?? new Map()}
             validationIssues={validation.byTableId.get(table.id)}
+            syncStatus={entitySyncMap?.get(table.name.toLowerCase())}
             pendingConnection={pendingConnection}
             isDragging={draggingTableId === table.id}
             onStartTableDrag={handleStartTableDrag}

@@ -10,6 +10,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ACCENT_BAR_MAP } from '../data/templates';
+import { EntitySyncStatus } from '../types/mma';
 import { Column, PendingConnection, SelectionState, Table } from '../types/schema';
 import { ValidationIssue } from '../utils/validator';
 import {
@@ -31,6 +32,7 @@ interface TableNodeProps {
   fkColumnIds: Set<string>;
   activeColumnPorts: Map<string, ActiveColumnPorts>;
   validationIssues?: ValidationIssue[];
+  syncStatus?: EntitySyncStatus;
   pendingConnection: PendingConnection | null;
   isDragging: boolean;
   onStartTableDrag: (e: React.PointerEvent, tableId: string) => void;
@@ -55,6 +57,7 @@ export const TableNode: React.FC<TableNodeProps> = ({
   fkColumnIds,
   activeColumnPorts,
   validationIssues = [],
+  syncStatus,
   pendingConnection,
   isDragging,
   onStartTableDrag,
@@ -116,6 +119,24 @@ export const TableNode: React.FC<TableNodeProps> = ({
           <span className="font-mono text-[13px] font-semibold text-slate-900 dark:text-slate-100 truncate">
             {table.name}
           </span>
+          {syncStatus && (
+            <span
+              title={
+                syncStatus.applied && syncStatus.pendingPropertyCount === 0
+                  ? 'Applied to solution'
+                  : syncStatus.applied
+                  ? `${syncStatus.pendingPropertyCount} pending propert${syncStatus.pendingPropertyCount === 1 ? 'y' : 'ies'}`
+                  : 'Pending code generation'
+              }
+              className={`px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide shrink-0 ${
+                syncStatus.applied && syncStatus.pendingPropertyCount === 0
+                  ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300'
+              }`}
+            >
+              {syncStatus.applied && syncStatus.pendingPropertyCount === 0 ? 'Applied' : 'Pending'}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">

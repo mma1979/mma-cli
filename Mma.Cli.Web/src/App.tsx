@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { bootstrapSession, mmaClient } from './api/mmaClient';
 import { Canvas } from './components/Canvas';
+import { GenerateModal } from './components/codegen/GenerateModal';
 import { ExportModal, ExportModalMode } from './components/ExportModal';
+import { SolutionsHub } from './components/hub/SolutionsHub';
 import {
   DatabaseImportPayload,
   ImportDatabaseModal,
@@ -16,6 +19,12 @@ import {
 } from './config/featureFlags';
 import { convertSchemaToEngine, ENGINE_PROFILES } from './data/engines';
 import { SCHEMA_TEMPLATES, SchemaTemplate, TABLE_ACCENT_PALETTE } from './data/templates';
+import {
+  EntitySyncStatus,
+  HealthInfo,
+  ProjectSummary,
+  SchemaSyncState,
+} from './types/mma';
 import {
   Cardinality,
   Column,
@@ -73,7 +82,17 @@ export default function App() {
   const [exportModalMode, setExportModalMode] = useState<ExportModalMode>(null);
   const [exportLiveWindow, setExportLiveWindow] = useState(false);
   const [importDbModalOpen, setImportDbModalOpen] = useState(false);
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>(loadInitialTheme);
+
+  const [viewMode, setViewMode] = useState<'booting' | 'hub' | 'workspace' | 'scratchpad'>('booting');
+  const [health, setHealth] = useState<HealthInfo | null>(null);
+  const [activeProject, setActiveProject] = useState<ProjectSummary | null>(null);
+  const [syncState, setSyncState] = useState<SchemaSyncState | null>(null);
+  const [savingSchema, setSavingSchema] = useState(false);
+  const hydratedSchemaRef = useRef(false);
+  const schemaRef = useRef(schema);
+  schemaRef.current = schema;
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const outlineSearchInputRef = useRef<HTMLInputElement | null>(null);
@@ -87,6 +106,82 @@ export default function App() {
     () => schema.tables.reduce((acc, t) => acc + (t.indexes?.length ?? 0), 0),
     [schema.tables]
   );
+
+  const entitySyncMap = useMemo(() => {
+    if (!syncState) return undefined;
+    const map = new Map<string, EntitySyncStatus>();
+    for (const item of syncState.entities) {
+      map.set(item.entityName.toLowerCase(), item);
+    }
+    return map;
+  }, [syncState]);
+
+  const openProjectWorkspace = useCallback(async (project: ProjectSummary) => {
+    hydratedSchemaRef.current = false;
+    const response = await mmaClient.getProjectSchema(project.id);
+    setActiveProject(response.project);
+    setSyncState(response.syncState);
+    setSchema(response.schema);
+    setPast([]);
+    setFuture([]);
+    setSelection({ type: 'none' });
+    setViewMode('workspace');
+    setTimeout(() => {
+      hydratedSchemaRef.current = true;
+    }, 0);
+  }, []);
+
+  const persistActiveSchema = useCallback(async () => {
+    if (!activeProject) return;
+    setSavingSchema(true);
+    try {
+      const saved = await mmaClient.saveProjectSchema(activeProject.id, schemaRef.current);
+      setSyncState(saved.syncState);
+    } finally {
+      setSavingSchema(false);
+    }
+  }, [activeProject]);
+
+  // Bootstrap session token exchange & optional initialPath auto-open
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { health: h, queryPath } = await bootstrapSession();
+        if (cancelled) return;
+        setHealth(h);
+
+        if (queryPath) {
+          try {
+            const imported = await mmaClient.importProject(queryPath);
+            if (!cancelled) {
+              await openProjectWorkspace(imported);
+              return;
+            }
+          } catch {
+            // Fall through to Solutions Hub if initial path is not a solution
+          }
+        }
+
+        if (!cancelled) setViewMode('hub');
+      } catch {
+        if (!cancelled) setViewMode('scratchpad');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [openProjectWorkspace]);
+
+  // Debounced auto-save when editing a bound MMA project
+  useEffect(() => {
+    if (viewMode !== 'workspace' || !activeProject || !hydratedSchemaRef.current) return;
+    const handle = window.setTimeout(() => {
+      void persistActiveSchema();
+    }, 800);
+    return () => window.clearTimeout(handle);
+  }, [schema, viewMode, activeProject, persistActiveSchema]);
 
   // Sync Tailwind v4 dark class on <html>
   useEffect(() => {
@@ -940,6 +1035,34 @@ export default function App() {
     handleDeleteTable,
   ]);
 
+  if (viewMode === 'booting') {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-slate-50 dark:bg-[#0B1120] text-slate-500 dark:text-slate-400 text-sm">
+        Connecting to MMA CLI host...
+      </div>
+    );
+  }
+
+  if (viewMode === 'hub') {
+    return (
+      <SolutionsHub
+        health={health}
+        theme={theme}
+        onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        onOpenProject={(proj) => void openProjectWorkspace(proj)}
+        onOpenScratchpad={() => {
+          setActiveProject(null);
+          setSyncState(null);
+          setSchema(createEmptySchemaModel());
+          setPast([]);
+          setFuture([]);
+          setSelection({ type: 'none' });
+          setViewMode('scratchpad');
+        }}
+      />
+    );
+  }
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-slate-50 dark:bg-[#0B1120] text-slate-900 dark:text-slate-100">
       <main className="flex-1 min-w-0 min-h-0 flex overflow-hidden">
@@ -988,6 +1111,16 @@ export default function App() {
             }}
             theme={theme}
             onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            activeProject={activeProject}
+            syncState={syncState}
+            saving={savingSchema}
+            onBackToHub={() => {
+              setActiveProject(null);
+              setSyncState(null);
+              setViewMode('hub');
+            }}
+            onSaveSchema={() => void persistActiveSchema()}
+            onOpenGenerate={() => setGenerateModalOpen(true)}
           />
 
           <Canvas
@@ -1000,6 +1133,7 @@ export default function App() {
             showInspector={showInspector}
             theme={theme}
             validation={validation}
+            entitySyncMap={entitySyncMap}
             onViewportChange={setViewport}
             onSelect={(sel) => {
               setSelection(sel);
@@ -1088,9 +1222,20 @@ export default function App() {
       <ImportDatabaseModal
         open={importDbModalOpen}
         existingTables={schema.tables}
+        isMmaProject={activeProject !== null}
         onImport={handleImportFromDatabase}
         onClose={() => setImportDbModalOpen(false)}
       />
+
+      {activeProject && (
+        <GenerateModal
+          open={generateModalOpen}
+          project={activeProject}
+          onBeforePreview={persistActiveSchema}
+          onApplied={(nextSync) => setSyncState(nextSync)}
+          onClose={() => setGenerateModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

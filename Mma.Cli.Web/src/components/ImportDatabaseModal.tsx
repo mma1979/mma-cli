@@ -44,6 +44,7 @@ export interface DatabaseImportPayload {
 interface ImportDatabaseModalProps {
   open: boolean;
   existingTables: Table[];
+  isMmaProject?: boolean;
   onImport: (payload: DatabaseImportPayload) => void;
   onClose: () => void;
 }
@@ -82,6 +83,7 @@ interface DiscoveredDatabase {
 export const ImportDatabaseModal: React.FC<ImportDatabaseModalProps> = ({
   open,
   existingTables,
+  isMmaProject = false,
   onImport,
   onClose,
 }) => {
@@ -101,6 +103,7 @@ export const ImportDatabaseModal: React.FC<ImportDatabaseModalProps> = ({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [ssl, setSsl] = useState(true);
+  const [excludeMmaSystemTables, setExcludeMmaSystemTables] = useState(isMmaProject);
   const [connecting, setConnecting] = useState(false);
 
   // SQL dump form state
@@ -299,6 +302,7 @@ export const ImportDatabaseModal: React.FC<ImportDatabaseModalProps> = ({
     try {
       const response = await fetch('/api/db/introspect', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           engine: liveEngine,
@@ -309,6 +313,7 @@ export const ImportDatabaseModal: React.FC<ImportDatabaseModalProps> = ({
           password,
           schemaFilter: schemaFilter.trim(),
           ssl,
+          excludeMmaSystemTables,
         }),
       });
       const data = await response.json();
@@ -658,16 +663,28 @@ export const ImportDatabaseModal: React.FC<ImportDatabaseModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-4 pt-1">
-                    <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={ssl}
-                        onChange={(e) => setSsl(e.target.checked)}
-                        className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>Use SSL / TLS encryption</span>
-                    </label>
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={ssl}
+                          onChange={(e) => setSsl(e.target.checked)}
+                          className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>Use SSL / TLS encryption</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={excludeMmaSystemTables}
+                          onChange={(e) => setExcludeMmaSystemTables(e.target.checked)}
+                          className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>Exclude MMA system tables &amp; audit columns</span>
+                      </label>
+                    </div>
 
                     <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />

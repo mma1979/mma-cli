@@ -6,12 +6,16 @@ import {
   FileJson,
   Grid,
   HardDriveDownload,
+  Home,
   ImageDown,
   Layers,
   LayoutGrid,
+  Loader2,
   Moon,
+  Play,
   Plus,
   Redo2,
+  Save,
   Sun,
   Undo2,
   Upload,
@@ -19,6 +23,7 @@ import {
 import { DEFAULT_DATABASE_ENGINE } from '../config/featureFlags';
 import { ENGINE_PROFILES, SUPPORTED_ENGINE_LIST } from '../data/engines';
 import { SCHEMA_TEMPLATES, SchemaTemplate } from '../data/templates';
+import { ProjectSummary, SchemaSyncState } from '../types/mma';
 import { DatabaseEngine } from '../types/schema';
 
 interface ToolbarProps {
@@ -40,6 +45,12 @@ interface ToolbarProps {
   onOpenImportJson: () => void;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
+  activeProject?: ProjectSummary | null;
+  syncState?: SchemaSyncState | null;
+  saving?: boolean;
+  onBackToHub?: () => void;
+  onSaveSchema?: () => void;
+  onOpenGenerate?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -61,6 +72,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onOpenImportJson,
   theme,
   onToggleTheme,
+  activeProject,
+  syncState,
+  saving = false,
+  onBackToHub,
+  onSaveSchema,
+  onOpenGenerate,
 }) => {
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [engineMenuOpen, setEngineMenuOpen] = useState(false);
@@ -94,6 +111,31 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       aria-label="Workspace toolbar"
       className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 p-1.5 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md border border-slate-200 dark:border-slate-700/90 rounded-xl shadow-md select-none"
     >
+      {onBackToHub && (
+        <>
+          <button
+            type="button"
+            onClick={onBackToHub}
+            title="Back to Solutions Hub"
+            aria-label="Back to Solutions Hub"
+            className={iconBtn}
+          >
+            <Home className="w-4 h-4" />
+          </button>
+          {activeProject && (
+            <div className="px-2 flex items-center gap-1.5 max-w-[180px]">
+              <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+                {activeProject.name}
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-slate-500 dark:text-slate-400 shrink-0">
+                {activeProject.mapper}
+              </span>
+            </div>
+          )}
+          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700/80 mx-1" aria-hidden="true" />
+        </>
+      )}
+
       {/* Database Engine Switcher */}
       <div className="relative" ref={engineMenuRef}>
         <button
@@ -303,6 +345,37 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       >
         <Code2 className="w-4 h-4" />
       </button>
+
+      {activeProject && onSaveSchema && onOpenGenerate && (
+        <>
+          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700/80 mx-1" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={onSaveSchema}
+            disabled={saving}
+            title="Save schema to solution (.mma/schema.json)"
+            aria-label="Save schema"
+            className={iconBtn}
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenGenerate}
+            title="Preview & Generate C# Code / EF Migration"
+            className="h-8 px-2.5 flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors cursor-pointer shrink-0"
+          >
+            <Play className="w-3.5 h-3.5" />
+            <span>Generate</span>
+            {syncState &&
+              syncState.pendingEntities + syncState.pendingProperties + syncState.pendingRelations > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-[10px] font-bold">
+                  {syncState.pendingEntities + syncState.pendingProperties + syncState.pendingRelations}
+                </span>
+              )}
+          </button>
+        </>
+      )}
 
       <div className="h-4 w-px bg-slate-200 dark:bg-slate-700/80 mx-1" aria-hidden="true" />
 
