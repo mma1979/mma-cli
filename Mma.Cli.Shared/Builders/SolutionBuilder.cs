@@ -46,9 +46,12 @@ namespace Mma.Cli.Shared.Builders
             return sb;
         }
 
-        public SolutionBuilder CreateSolutionDirectory()
+        public SolutionBuilder CreateSolutionDirectory() =>
+            CreateSolutionDirectory(Directory.GetCurrentDirectory());
+
+        public SolutionBuilder CreateSolutionDirectory(string parentDirectory)
         {
-            var path = Path.Combine(Directory.GetCurrentDirectory(), SolutionName);
+            var path = Path.Combine(parentDirectory, SolutionName);
             Output.Warning($"Creating {path}");
             _ = Directory.CreateDirectory(path);
             SolutionPath = path;

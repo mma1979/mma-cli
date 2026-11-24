@@ -8,4 +8,5 @@ public sealed record IntrospectionRequest
     public string? Password { get; init; }
     public string? SchemaFilter { get; init; }
     public bool? Ssl { get; init; }
+    public bool? ExcludeMmaSystemTables { get; init; }
 }

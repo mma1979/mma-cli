@@ -4,7 +4,9 @@ using System.Text.Json.Serialization;
 
 using Microsoft.EntityFrameworkCore;
 
+using Mma.Cli.Bff.CodeGen;
 using Mma.Cli.Bff.Persistence;
+using Mma.Cli.Bff.Projects;
 using Mma.Cli.Bff.Security;
 using Mma.Cli.Shared.Data;
 
@@ -150,6 +152,11 @@ builder.Services.AddSingleton<IDatabaseIntrospectionProvider, PostgreSqlIntrospe
 builder.Services.AddSingleton<IDatabaseIntrospectionProvider, MySqlIntrospectionProvider>();
 builder.Services.AddSingleton<IDatabaseIntrospectionProvider, SqlServerIntrospectionProvider>();
 builder.Services.AddSingleton<IDatabaseIntrospectionService, DatabaseIntrospectionService>();
+builder.Services.AddSingleton<FileSystemService>();
+builder.Services.AddSingleton<IEfMigrationRunner, EfMigrationRunner>();
+builder.Services.AddScoped<ProjectService>();
+builder.Services.AddScoped<SchemaSyncService>();
+builder.Services.AddScoped<MmaCodeGenOrchestrator>();
 
 var app = builder.Build();
 
@@ -162,6 +169,8 @@ using (var scope = app.Services.CreateScope())
 
 app.UseMiddleware<LocalSessionAuthMiddleware>();
 app.MapSessionAndHealthEndpoints();
+app.MapProjectAndFileSystemEndpoints();
+app.MapCodeGenEndpoints();
 
 app.MapPost("/api/db/introspect", async (
     HttpContext context,
