@@ -8,7 +8,7 @@
     <InternalsVisibleTo Include="Mma.Cli.Bff.Tests" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="CliWrap" Version="3.6.6" />
+    <PackageReference Include="CliWrap" Version="3.10.5" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.2" />
     <PackageReference Include="MySqlConnector" Version="3.0.0" />
     <PackageReference Include="Npgsql" Version="11.0.0" />
