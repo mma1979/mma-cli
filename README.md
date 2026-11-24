@@ -148,24 +148,24 @@ You can use interactive mode by enter command `mma` without any arguments in sol
 
 ![image](https://i.imgur.com/DpTWnj2.gif)
 
-### UI
+### UI (MMA CLI Studio — .NET 10 + React)
 
-Also you can use UI mode to create and manage your solutions. Select `UI` from `Interactive` or execute `mma ui`
+Launch the local visual schema designer and code generator via `mma ui` (or select `UI` in interactive mode).
 
-> Thanks to [Radzen](https://blazor.radzen.com/)
-
-````bash
+```bash
 mma ui
-````
+```
 
-![UI Screen 1](https://i.imgur.com/wE6nXWF.png)
+#### Available UI Options
+- `-p, --port <port>` — Loopback port to bind (default `5080`; pass `0` to auto-select a free port)
+- `--path <dir>` — Auto-open or import an existing `.sln`/`.slnx` solution directory
+- `--no-browser` — Do not automatically open the browser
+- `--no-local-db` — Disable loopback/private-network live database introspection
+- `-h, --help` — Show `mma ui` usage and examples
 
-![UI Screen 2](https://i.imgur.com/ARweSJu.png)
-
-![UI Screen 3](https://i.imgur.com/5BxbvkC.png)
-
-![UI Screen 4](https://i.imgur.com/iMnGJcx.png)
-
-![UI Screen 5](https://i.imgur.com/eYiSLBS.png)
-
-![UI Screen 6](https://i.imgur.com/CS8PQE2.png)
+Key UI capabilities:
+- **Solutions Hub:** Create new solutions (`AutoMapper` / `Mapster`), import existing `.sln`/`.slnx` solutions, or use standalone Scratchpad mode.
+- **Visual ERD Designer:** Drag-and-drop tables, columns, composite foreign keys, indexes, and constraints with live SQL/JSON/SVG/PNG export.
+- **Multi-Database Reverse Engineering:** Read-only live introspection for PostgreSQL, MySQL, and SQL Server (plus SQL DDL script import) with an opt-in filter for MMA system/audit columns.
+- **Preview & Generate:** Dry-run diff of pending entities, properties, and relations with copyable `mma g ...` commands and optional `dotnet ef migrations add`.
+- **Packaging from Source:** Run `pwsh -NoProfile -File scripts/pack-tool.ps1` (requires `.NET 10 SDK` and `Node.js 20.19+`).
