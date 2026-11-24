@@ -9,12 +9,16 @@ using Mma.Cli.Shared.Data;
 using Mma.Cli.Shared.Exceptions;
 using Mma.Cli.Shared.Helpers;
 using Mma.Cli.Shared.Models;
+using Mma.Cli.Shared.Solutions;
 
 using Newtonsoft.Json;
 
 namespace Mma.Cli.Bff.Projects;
 
-public sealed partial class ProjectService(CliDbContext dbContext, IEfMigrationRunner efMigrationRunner)
+public sealed partial class ProjectService(
+    CliDbContext dbContext,
+    IEfMigrationRunner efMigrationRunner,
+    IDotnetTemplateRunner templateRunner)
 {
     [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9._-]{0,127}$")]
     private static partial Regex ValidSolutionNameRegex();
@@ -67,14 +71,10 @@ public sealed partial class ProjectService(CliDbContext dbContext, IEfMigrationR
             ? Mappers.Mapster
             : Mappers.AutoMapper;
 
-        SolutionBuilder.New(name, mapper)
-            .CreateSolutionDirectory(normalizedParent)
-            .ExtractSolution()
-            .RootRenameAndReplace()
-            .RenameProjects()
-            .RenameCsprojFiles()
-            .ReplaceNamespaces()
-            .CreateMmaFolder();
+        var builder = SolutionBuilder.New(name, mapper)
+            .CreateSolutionDirectory(normalizedParent);
+        await builder.ScaffoldFromTemplateAsync(templateRunner, cancellationToken: cancellationToken);
+        builder.CreateMmaFolder();
 
         var project = new ProjectModel
         {

@@ -4,10 +4,13 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 using Mma.Cli.Bff.CodeGen;
 using Mma.Cli.Bff.Projects;
 using Mma.Cli.Shared.Consts;
+using Mma.Cli.Shared.Solutions;
 
 using Xunit;
 
@@ -69,6 +72,11 @@ public sealed class MmaSchemaMapperTests : IDisposable
             {
                 ["MMA_CLI_DATA_DIR"] = _dataDir,
             }));
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IDotnetTemplateRunner>();
+                services.AddSingleton<IDotnetTemplateRunner, FakeDotnetTemplateRunner>();
+            });
         });
 
         using var client = factory.CreateClient();

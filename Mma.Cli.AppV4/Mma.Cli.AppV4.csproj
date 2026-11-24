@@ -23,7 +23,6 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="RestSharp" Version="112.0.0" />
     <PackageReference Include="Sharprompt" Version="2.4.5" />
-    <PackageReference Include="SharpZipLib" Version="1.4.2" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="nupkg\" />

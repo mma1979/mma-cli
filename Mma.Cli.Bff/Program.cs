@@ -9,6 +9,7 @@ using Mma.Cli.Bff.Persistence;
 using Mma.Cli.Bff.Projects;
 using Mma.Cli.Bff.Security;
 using Mma.Cli.Shared.Data;
+using Mma.Cli.Shared.Solutions;
 
 var currentDirectory = Directory.GetCurrentDirectory();
 var webRootCandidates = new[]
@@ -154,6 +155,7 @@ builder.Services.AddSingleton<IDatabaseIntrospectionProvider, SqlServerIntrospec
 builder.Services.AddSingleton<IDatabaseIntrospectionService, DatabaseIntrospectionService>();
 builder.Services.AddSingleton<FileSystemService>();
 builder.Services.AddSingleton<IEfMigrationRunner, EfMigrationRunner>();
+builder.Services.AddSingleton<IDotnetTemplateRunner, DotnetTemplateRunner>();
 builder.Services.AddScoped<ProjectService>();
 builder.Services.AddScoped<SchemaSyncService>();
 builder.Services.AddScoped<MmaCodeGenOrchestrator>();

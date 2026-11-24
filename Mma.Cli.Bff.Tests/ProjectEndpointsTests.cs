@@ -5,8 +5,11 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 using Mma.Cli.Bff.Projects;
+using Mma.Cli.Shared.Solutions;
 
 using Xunit;
 
@@ -50,6 +53,11 @@ public sealed class ProjectEndpointsTests : IDisposable
             {
                 ["MMA_CLI_DATA_DIR"] = _dataDir,
             }));
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IDotnetTemplateRunner>();
+                services.AddSingleton<IDotnetTemplateRunner, FakeDotnetTemplateRunner>();
+            });
         });
 
     [Fact]

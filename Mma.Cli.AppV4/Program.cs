@@ -5,6 +5,7 @@ using Mma.Cli.Shared.Builders;
 using Mma.Cli.Shared.Consts;
 using Mma.Cli.Shared.Exceptions;
 using Mma.Cli.Shared.Helpers;
+using Mma.Cli.Shared.Solutions;
 
 using Sharprompt;
 
@@ -68,7 +69,7 @@ public class Program
 
         return command switch
         {
-            CommandsFlags.New or CommandsFlags.NewShortHand => HandleNewCommand(args),
+            CommandsFlags.New or CommandsFlags.NewShortHand => await HandleNewCommandAsync(args),
             CommandsFlags.Generate or CommandsFlags.GenerateShortHand => HandleGenerateCommand(args),
             CommandsFlags.UI => await HandleUICommand(args),
             CommandsFlags.Import => HandleImportCommand(args),
@@ -78,16 +79,12 @@ public class Program
         };
     }
 
-    private static int HandleNewCommand(string[] args)
+    private static async Task<int> HandleNewCommandAsync(string[] args)
     {
-        SolutionBuilder.New(args)
-            .CreateSolutionDirectory()
-            .ExtractSolution()
-            .RootRenameAndReplace()
-            .RenameProjects()
-            .RenameCsprojFiles()
-            .ReplaceNamespaces()
-            .CreateMmaFolder();
+        var runner = new DotnetTemplateRunner();
+        var builder = SolutionBuilder.New(args).CreateSolutionDirectory();
+        await builder.ScaffoldFromTemplateAsync(runner, cancellationToken: ShutdownCts.Token);
+        builder.CreateMmaFolder();
 
         Output.Success("Solution Created");
         return 0;
@@ -211,7 +208,7 @@ public class Program
 
         return command switch
         {
-            Commands.NEW => HandleInteractiveNew(),
+            Commands.NEW => await HandleInteractiveNewAsync(),
             Commands.GENERATE => HandleInteractiveGenerate(),
             Commands.UI => await HandleUICommand(["ui"]),
             Commands.WATCH => HandleWatch(),
@@ -219,21 +216,17 @@ public class Program
         };
     }
 
-    private static int HandleInteractiveNew()
+    private static async Task<int> HandleInteractiveNewAsync()
     {
         var solutionName = Prompt.Input<string>("Enter Solution Name");
         var mapper = Prompt.Select("Select the Mapper",
             new[] { Mappers.AutoMapper, Mappers.Mapster },
             defaultValue: Mappers.AutoMapper);
 
-        SolutionBuilder.New(solutionName, mapper)
-            .CreateSolutionDirectory()
-            .ExtractSolution()
-            .RootRenameAndReplace()
-            .RenameProjects()
-            .RenameCsprojFiles()
-            .ReplaceNamespaces()
-            .CreateMmaFolder();
+        var runner = new DotnetTemplateRunner();
+        var builder = SolutionBuilder.New(solutionName, mapper).CreateSolutionDirectory();
+        await builder.ScaffoldFromTemplateAsync(runner, cancellationToken: ShutdownCts.Token);
+        builder.CreateMmaFolder();
 
         Output.Success("Solution Created");
         return 0;
