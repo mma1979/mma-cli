@@ -58,6 +58,14 @@ namespace Mma.Cli.Shared.Helpers
             return "Error";
         }
 
+        public static Task Error(string msg, CancellationToken _)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine(msg);
+
+            return Task.CompletedTask;
+        }
+
 
     }
 }
