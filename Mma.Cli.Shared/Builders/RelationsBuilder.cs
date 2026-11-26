@@ -87,7 +87,7 @@ namespace Mma.Cli.Shared.Builders
 
             void UpdateModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}Dto.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}ModifyModel.cs");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -103,7 +103,7 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveFromModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}Dto.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}ModifyModel.cs");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var navigation_line = lines.FirstOrDefault(l => l.Contains(navigation));
@@ -136,7 +136,7 @@ namespace Mma.Cli.Shared.Builders
 
             void UpdateModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}Dto.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ModifyModel.cs");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -169,7 +169,7 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveFromModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}Dto.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ModifyModel.cs");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(foreignKey));
