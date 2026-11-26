@@ -23,6 +23,7 @@ namespace Mma.Cli.Shared.Builders
         public string ComponentName { get; private set; } = "";
         public string PkType { get; private set; } = "";
         public string Mapper { get; private set; } = "";
+        public EntityCodeGenOptions CodeGenOptions { get; private set; } = EntityCodeGenOptions.Default;
 
         public EntityBuilder()
         {
@@ -51,42 +52,50 @@ namespace Mma.Cli.Shared.Builders
 
         public static EntityBuilder New(string[] args)
         {
-            var mapperFlagIndex = Array.IndexOf(args, Flags.MapperFlag);
-            var mapper = args[mapperFlagIndex + 1].ToLower() switch
-            {
-                "mapster" => Mappers.Mapster,
-                _ => Mappers.AutoMapper
-            };
             var builder = new EntityBuilder();
+            return InitializeFromArgs(builder, args);
+        }
+
+        public static EntityBuilder New(string[] args, string solutionPath)
+        {
+            var builder = new EntityBuilder(solutionPath);
+            return InitializeFromArgs(builder, args);
+        }
+
+        private static EntityBuilder InitializeFromArgs(EntityBuilder builder, string[] args)
+        {
+            var mapperFlagIndex = Array.IndexOf(args, Flags.MapperFlag);
+            string mapper;
+            if (mapperFlagIndex >= 0 && mapperFlagIndex + 1 < args.Length)
+            {
+                mapper = args[mapperFlagIndex + 1].ToLowerInvariant() switch
+                {
+                    "mapster" => Mappers.Mapster,
+                    _ => Mappers.AutoMapper
+                };
+            }
+            else
+            {
+                mapper = Directory.Exists(builder.SolutionPath)
+                    ? BuildHelper.DetectMapper(builder.SolutionPath)
+                    : Mappers.AutoMapper;
+            }
+
             builder.ComponentType = args[1];
             builder.ComponentName = args[2];
-            builder.PkType = args.Length > 3 ? args[3] : PkTypes.GUID;
+            builder.PkType = args.Length > 3 && !args[3].StartsWith("--", StringComparison.Ordinal) ? args[3] : PkTypes.GUID;
             builder.Mapper = mapper;
+            builder.CodeGenOptions = EntityCodeGenOptions.FromArgs(args);
 
             (builder.SolutionName, builder.ProjectsPath) = BuildHelper.CheckSolutionPath(builder.SolutionPath);
 
             return builder;
         }
 
-        public static EntityBuilder New(string[] args, string solutionPath)
+        public EntityBuilder WithCodeGenOptions(EntityCodeGenOptions options)
         {
-            var mapperFlagIndex = Array.IndexOf(args, Flags.MapperFlag);
-            var mapper = args[mapperFlagIndex + 1].ToLower() switch
-            {
-                "mapster" => Mappers.Mapster,
-                _ => Mappers.AutoMapper
-            };
-            var builder = new EntityBuilder(solutionPath)
-            {
-                ComponentType = args[1],
-                ComponentName = args[2],
-                PkType = args.Length > 3 ? args[3] : PkTypes.GUID,
-                Mapper = mapper
-            };
-
-            (builder.SolutionName, builder.ProjectsPath) = BuildHelper.CheckSolutionPath(builder.SolutionPath);
-
-            return builder;
+            CodeGenOptions = options ?? EntityCodeGenOptions.Default;
+            return this;
         }
 
 
@@ -307,8 +316,11 @@ namespace Mma.Cli.Shared.Builders
             return this;
         }
 
-        public EntityBuilder GenerateService()
+        public EntityBuilder GenerateService() => GenerateService(CodeGenOptions.GenerateService);
+
+        public EntityBuilder GenerateService(bool generate)
         {
+            if (!generate) return this;
 
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Services", $"{ComponentName}Service.cs");
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -318,8 +330,8 @@ namespace Mma.Cli.Shared.Builders
 
             var template = Mapper switch
             {
-                Mappers.Mapster => Templates.Mappster.Service.Template,
-                _ => Templates.AutoMapper.Service.Template
+                Mappers.Mapster => Templates.Mappster.Service.Render(CodeGenOptions),
+                _ => Templates.AutoMapper.Service.Render(CodeGenOptions)
             };
 
             using StreamWriter writer = new(path);
@@ -337,9 +349,11 @@ namespace Mma.Cli.Shared.Builders
             return this;
         }
 
+        public EntityBuilder GenerateController() => GenerateController(CodeGenOptions.EffectiveGenerateApiController);
+
         public EntityBuilder GenerateController(bool generate)
         {
-            if (!generate) return this;
+            if (!generate || !CodeGenOptions.GenerateService) return this;
 
             var entitySetName = BuildHelper.GetSetName(ComponentName);
             var entityNameVar = $"{ComponentName[0].ToString().ToLower()}{ComponentName.AsSpan(1).ToString()}";
@@ -347,9 +361,13 @@ namespace Mma.Cli.Shared.Builders
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.AppApi", "Controllers", "v1", $"{entitySetName}Controller.cs");
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
+            var template = Mapper is Mappers.Mapster
+                ? MappsterController.Render(CodeGenOptions)
+                : Controller.Render(CodeGenOptions);
+
             using StreamWriter writer = new(path);
             writer.Write(
-               (Mapper is Mappers.Mapster ? MappsterController.Template : Controller.Template)
+               template
                     .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
                     .Replace("$EntityVarName", entityNameVar)

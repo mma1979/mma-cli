@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
+using Mma.Cli.Shared.Builders;
 using Mma.Cli.Shared.Consts;
 using Mma.Cli.Shared.Data;
 using Mma.Cli.Shared.Models;
@@ -119,6 +120,11 @@ public static class MmaSchemaMapper
             var x = 80 + colIndex * 360;
             var y = 80 + rowIndex * 280;
 
+            var codeGenOptions = EntityCodeGenOptions.FromServiceMethodsCsv(
+                entity.HasService,
+                entity.HasApi,
+                entity.ServiceMethods);
+
             tables.Add(new SchemaTableDto(
                 tableId,
                 entity.EntityName,
@@ -126,17 +132,9 @@ public static class MmaSchemaMapper
                 StorageEngine: null,
                 Charset: null,
                 CodeGen: new TableCodeGenConfigDto(
-                    AddService: entity.HasService,
-                    ServiceMethods: new Dictionary<string, bool>
-                    {
-                        ["getAll"] = true,
-                        ["select"] = true,
-                        ["find"] = true,
-                        ["add"] = true,
-                        ["update"] = true,
-                        ["delete"] = true,
-                    },
-                    AddApiController: entity.HasApi),
+                    AddService: codeGenOptions.GenerateService,
+                    ServiceMethods: codeGenOptions.ToServiceMethodsDictionary(),
+                    AddApiController: codeGenOptions.EffectiveGenerateApiController),
                 Color: colors[i % colors.Length],
                 Comment: string.Empty,
                 X: x,
@@ -238,8 +236,13 @@ public static class MmaSchemaMapper
             var pkCol = table.Columns.FirstOrDefault(c => c.IsPrimaryKey)
                 ?? table.Columns.FirstOrDefault(c => string.Equals(c.Name, "Id", StringComparison.OrdinalIgnoreCase));
             var pkType = pkCol is not null ? MapSqlTypeToCSharp(pkCol.Type) : PkTypes.GUID;
-            var hasService = table.CodeGen?.AddService ?? true;
-            var hasApi = table.CodeGen?.AddApiController ?? true;
+            var codeGenOptions = EntityCodeGenOptions.FromDictionary(
+                table.CodeGen?.AddService ?? true,
+                table.CodeGen?.AddApiController ?? true,
+                table.CodeGen?.ServiceMethods);
+            var hasService = codeGenOptions.GenerateService;
+            var hasApi = codeGenOptions.EffectiveGenerateApiController;
+            var serviceMethodsCsv = codeGenOptions.ToServiceMethodsCsv();
 
             if (!existingByName.TryGetValue(entityName, out var entity))
             {
@@ -250,6 +253,7 @@ public static class MmaSchemaMapper
                     PkType = pkType,
                     HasService = hasService,
                     HasApi = hasApi,
+                    ServiceMethods = serviceMethodsCsv,
                     Applied = false,
                 };
                 dbContext.Entities.Add(entity);
@@ -261,6 +265,7 @@ public static class MmaSchemaMapper
                 entity.PkType = pkType;
                 entity.HasService = hasService;
                 entity.HasApi = hasApi;
+                entity.ServiceMethods = serviceMethodsCsv;
             }
 
             tableIdToEntity[table.Id] = entity;

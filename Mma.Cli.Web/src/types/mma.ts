@@ -70,7 +70,9 @@ export interface SaveSchemaResponse {
 export interface PendingEntity {
   entityName: string;
   pkType: string;
+  hasService: boolean;
   hasApi: boolean;
+  serviceMethods: string[];
 }
 
 export interface PendingProperty {

@@ -1,14 +1,28 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Text;
+
+using Mma.Cli.Shared.Builders;
 
 namespace Mma.Cli.Shared.Templates.AutoMapper
 {
     public static class Service
     {
-        public const string Template = @"using AutoMapper;
+        public static string Template => Render(EntityCodeGenOptions.Default);
+
+        public static string Render(EntityCodeGenOptions options)
+        {
+            var sb = new StringBuilder();
+            sb.Append(Header);
+            if (options.GetAll) sb.Append(AllMethod);
+            if (options.Select) sb.Append(SelectMethod);
+            if (options.Find) sb.Append(FindMethods);
+            if (options.Add) sb.Append(AddMethod);
+            if (options.Update) sb.Append(UpdateMethod);
+            if (options.Delete) sb.Append(DeleteMethod);
+            sb.Append(Footer);
+            return sb.ToString();
+        }
+
+        private const string Header = @"using AutoMapper;
 
 using $SolutionName.Core.Database.Tables;
 using $SolutionName.Core.Models;
@@ -46,8 +60,9 @@ namespace $SolutionName.Services
             _cacheService = cacheService;
             _mapper = mapper;
         }
+";
 
-
+        private const string AllMethod = @"
 
         public async Task<ResultViewModel<List<$EntityNameReadModel>>> All(QueryViewModel query)
         {
@@ -111,7 +126,9 @@ namespace $SolutionName.Services
                 };
             }
         }
+";
 
+        private const string SelectMethod = @"
         public async Task<ResultViewModel<List<dynamic>>> Select(QueryViewModel query)
 		{
 			var cacheKey = $""{CACHING_PREFIX}-select{query.GetHashCode()}"";
@@ -174,7 +191,9 @@ namespace $SolutionName.Services
 				};
 			}
 		}
+";
 
+        private const string FindMethods = @"
         public async Task<ResultViewModel<$EntityNameModifyModel>> Find(Expression<Func<$EntityName, bool>> predicate)
         {
 			var cacheKey = $""{CACHING_PREFIX}{predicate.Body.GetHashCode()}"";
@@ -250,7 +269,9 @@ namespace $SolutionName.Services
                 };
             }
         }
+";
 
+        private const string AddMethod = @"
 
         public async Task<AcknowledgeViewModel> Add($EntityNameModifyModel model)
         {
@@ -282,7 +303,9 @@ namespace $SolutionName.Services
                 };
             }
         }
+";
 
+        private const string UpdateMethod = @"
         public async Task<AcknowledgeViewModel> Update($EntityNameModifyModel model)
         {
             try
@@ -327,7 +350,9 @@ namespace $SolutionName.Services
                 };
             }
         }
+";
 
+        private const string DeleteMethod = @"
         public async Task<AcknowledgeViewModel> Delete($PK id)
         {
             try
@@ -370,7 +395,9 @@ namespace $SolutionName.Services
                 };
             }
         }
+";
 
+        private const string Footer = @"
 #region IDisposable Support
         public void Dispose(bool dispose)
         {
@@ -385,10 +412,6 @@ namespace $SolutionName.Services
         {
             GC.SuppressFinalize(this);
         }
-
-
-
-
 
         #endregion
 

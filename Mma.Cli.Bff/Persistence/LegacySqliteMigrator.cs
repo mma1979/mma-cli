@@ -76,6 +76,24 @@ public static class LegacySqliteMigrator
                 alter.CommandText = "ALTER TABLE Projects ADD COLUMN UpdatedAtUtc TEXT NULL;";
                 await alter.ExecuteNonQueryAsync(cancellationToken);
             }
+
+            var entityColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            await using (var cmd = connection.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA table_info('Entities');";
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    entityColumns.Add(reader.GetString(1));
+                }
+            }
+
+            if (entityColumns.Count > 0 && !entityColumns.Contains("ServiceMethods"))
+            {
+                await using var alter = connection.CreateCommand();
+                alter.CommandText = "ALTER TABLE Entities ADD COLUMN ServiceMethods TEXT NULL;";
+                await alter.ExecuteNonQueryAsync(cancellationToken);
+            }
         }
         finally
         {

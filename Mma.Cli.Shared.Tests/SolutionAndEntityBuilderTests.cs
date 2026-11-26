@@ -201,6 +201,85 @@ public sealed class SolutionAndEntityBuilderTests : IDisposable
         Assert.Equal(Mappers.Mapster, BuildHelper.DetectMapper(emptySolutionDir));
     }
 
+    [Fact]
+    public async Task GenerateEntity_HonorsNoService_NoApi_AndSelectedCrudMethods()
+    {
+        const string solutionName = "Acme.Billing";
+        var originalCwd = Directory.GetCurrentDirectory();
+        var solutionPath = Path.Combine(_tempRoot, solutionName);
+        var fakeRunner = new FakeTemplateRunner();
+
+        try
+        {
+            Directory.SetCurrentDirectory(_tempRoot);
+
+            var builder = SolutionBuilder.New(solutionName, Mappers.AutoMapper)
+                .CreateSolutionDirectory();
+            await builder.ScaffoldFromTemplateAsync(fakeRunner);
+            builder.CreateMmaFolder();
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalCwd);
+        }
+
+        var projectsPath = Path.Combine(solutionPath, solutionName);
+
+        // 1. --no-service skips both Service and Controller
+        EntityBuilder.New(["g", "e", "Ledger", PkTypes.GUID, Flags.MapperFlag, Mappers.AutoMapper, Flags.ServiceFlag], solutionPath)
+            .GenerateModels()
+            .GenerateValidator()
+            .GenerateEntity()
+            .GenerateEntityConfig()
+            .DbContextMapping()
+            .GenerateService()
+            .GenerateController();
+
+        Assert.True(File.Exists(Path.Combine(projectsPath, $"{solutionName}.Core", "Database", "Tables", "Ledger.cs")));
+        Assert.False(File.Exists(Path.Combine(projectsPath, $"{solutionName}.Services", "LedgerService.cs")));
+        Assert.False(File.Exists(Path.Combine(projectsPath, $"{solutionName}.AppApi", "Controllers", "v1", "LedgersController.cs")));
+
+        // 2. --methods getAll,find generates only All + Find in Service and GetAll + GetOne in Controller
+        EntityBuilder.New(["g", "e", "Invoice", PkTypes.LONG, Flags.MapperFlag, Mappers.AutoMapper, Flags.MethodsFlag, "getAll,find"], solutionPath)
+            .GenerateModels()
+            .GenerateValidator()
+            .GenerateEntity()
+            .GenerateEntityConfig()
+            .DbContextMapping()
+            .GenerateService()
+            .GenerateController();
+
+        var invoiceService = File.ReadAllText(Path.Combine(projectsPath, $"{solutionName}.Services", "InvoiceService.cs"));
+        Assert.Contains("All(QueryViewModel query)", invoiceService);
+        Assert.Contains("Find(long id)", invoiceService);
+        Assert.DoesNotContain("Select(QueryViewModel query)", invoiceService);
+        Assert.DoesNotContain("Add(InvoiceModifyModel", invoiceService);
+        Assert.DoesNotContain("Update(InvoiceModifyModel", invoiceService);
+        Assert.DoesNotContain("Delete(long id)", invoiceService);
+
+        var invoiceController = File.ReadAllText(Path.Combine(projectsPath, $"{solutionName}.AppApi", "Controllers", "v1", "InvoicesController.cs"));
+        Assert.Contains("GetAll(", invoiceController);
+        Assert.Contains("_invoiceService.All(query)", invoiceController);
+        Assert.DoesNotContain("_invoiceService.Select(query)", invoiceController);
+        Assert.Contains("GetOne(", invoiceController);
+        Assert.DoesNotContain("PostInvoice(", invoiceController);
+        Assert.DoesNotContain("PutInvoice(", invoiceController);
+        Assert.DoesNotContain("DeleteInvoice(", invoiceController);
+
+        // 3. --no-api generates Service but skips Controller
+        EntityBuilder.New(["g", "e", "AuditNote", PkTypes.GUID, Flags.MapperFlag, Mappers.AutoMapper, Flags.ApiFlag], solutionPath)
+            .GenerateModels()
+            .GenerateValidator()
+            .GenerateEntity()
+            .GenerateEntityConfig()
+            .DbContextMapping()
+            .GenerateService()
+            .GenerateController();
+
+        Assert.True(File.Exists(Path.Combine(projectsPath, $"{solutionName}.Services", "AuditNoteService.cs")));
+        Assert.False(File.Exists(Path.Combine(projectsPath, $"{solutionName}.AppApi", "Controllers", "v1", "AuditNotesController.cs")));
+    }
+
     private sealed class FakeTemplateRunner : IDotnetTemplateRunner
     {
         private readonly HashSet<string> _installed = new(StringComparer.OrdinalIgnoreCase);

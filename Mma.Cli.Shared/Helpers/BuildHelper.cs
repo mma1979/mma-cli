@@ -78,7 +78,8 @@ namespace Mma.Cli.Shared.Helpers
         {
             // New 11-project .slnx flat layout: <solutionPath>/<SolutionName>.Core
             if (Directory.Exists(Path.Combine(solutionPath, $"{solutionName}.Core"))
-                || Directory.Exists(Path.Combine(solutionPath, $"{solutionName}.AppApi")))
+                || Directory.Exists(Path.Combine(solutionPath, $"{solutionName}.AppApi"))
+                || Directory.Exists(Path.Combine(solutionPath, $"{solutionName}.EntityFramework")))
             {
                 return solutionPath;
             }
@@ -181,6 +182,9 @@ COMMAND OPTIONS:
          property, p   To indicate scaffolding of a property, enter Entity name, Property name, Property datatype. To remove, add --remove flag
          relation, r   To indicate scaffolding of a relation, enter reference Entity name, child Entity name, ForeignKey datatype. To remove, add --remove flag
       --mapper      Select the mapper package (allowed packages are Mapster | AutoMapper, default: AutoMapper)
+      --no-service  Skip generating the entity service and API controller
+      --no-api      Skip generating the API controller
+      --methods     Comma-separated CRUD methods to generate (getAll,select,find,add,update,delete | none)
 
 EXAMPLES:
    Create Solution:

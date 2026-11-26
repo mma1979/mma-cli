@@ -244,4 +244,160 @@ public sealed class MmaCodeGenOrchestratorTests : IDisposable
         Assert.Equal(2, table.Columns.Count);
         Assert.DoesNotContain(table.Columns, c => c.Name is "CreatedDate" or "IsDeleted");
     }
+
+    [Fact]
+    public async Task PreviewAndApply_HonorsTableCodeGenOptions_ServiceMethodsAndApiToggle()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        var createRes = await client.PostAsJsonAsync(
+            "/api/projects",
+            new CreateProjectRequest("Acme.Studio", _workDir, "AutoMapper"));
+        createRes.EnsureSuccessStatusCode();
+        var project = (await createRes.Content.ReadFromJsonAsync<ProjectSummaryDto>())!;
+
+        var schema = new SchemaModelDto(
+            Id: $"project-{project.Id}",
+            Name: project.Name,
+            Engine: "mssql",
+            Description: "",
+            UpdatedAt: DateTime.UtcNow.ToString("O"),
+            Tables:
+            [
+                new SchemaTableDto(
+                    Id: "t_ledger",
+                    Name: "Ledger",
+                    Schema: "dbo",
+                    StorageEngine: null,
+                    Charset: null,
+                    CodeGen: new TableCodeGenConfigDto(false, null, false),
+                    Color: "slate",
+                    Comment: "",
+                    X: 100,
+                    Y: 100,
+                    Columns:
+                    [
+                        new SchemaColumnDto("c_ledger_id", "Id", "uniqueidentifier", true, false, true, false, "", "", ""),
+                    ]),
+                new SchemaTableDto(
+                    Id: "t_invoice",
+                    Name: "Invoice",
+                    Schema: "dbo",
+                    StorageEngine: null,
+                    Charset: null,
+                    CodeGen: new TableCodeGenConfigDto(
+                        AddService: true,
+                        ServiceMethods: new Dictionary<string, bool>
+                        {
+                            ["getAll"] = true,
+                            ["select"] = false,
+                            ["find"] = true,
+                            ["add"] = true,
+                            ["update"] = false,
+                            ["delete"] = false,
+                        },
+                        AddApiController: true),
+                    Color: "blue",
+                    Comment: "",
+                    X: 400,
+                    Y: 100,
+                    Columns:
+                    [
+                        new SchemaColumnDto("c_inv_id", "Id", "bigint", true, false, true, true, "", "", ""),
+                    ]),
+                new SchemaTableDto(
+                    Id: "t_note",
+                    Name: "AuditNote",
+                    Schema: "dbo",
+                    StorageEngine: null,
+                    Charset: null,
+                    CodeGen: new TableCodeGenConfigDto(true, null, false),
+                    Color: "amber",
+                    Comment: "",
+                    X: 700,
+                    Y: 100,
+                    Columns:
+                    [
+                        new SchemaColumnDto("c_note_id", "Id", "uniqueidentifier", true, false, true, false, "", "", ""),
+                    ]),
+            ],
+            Relations: []);
+
+        var putRes = await client.PutAsJsonAsync($"/api/projects/{project.Id}/schema", schema);
+        putRes.EnsureSuccessStatusCode();
+
+        // Preview reflects CodeGen flags
+        var previewRes = await client.PostAsync($"/api/projects/{project.Id}/generate/preview", null);
+        previewRes.EnsureSuccessStatusCode();
+        var preview = (await previewRes.Content.ReadFromJsonAsync<CodeGenPreviewDto>())!;
+
+        Assert.Contains(preview.EquivalentCommands, c => c.Contains("mma g e Ledger Guid") && c.Contains("--no-service"));
+        Assert.Contains(preview.EquivalentCommands, c => c.Contains("mma g e Invoice long") && c.Contains("--methods getAll,find,add"));
+        Assert.Contains(preview.EquivalentCommands, c => c.Contains("mma g e AuditNote Guid") && c.Contains("--no-api"));
+
+        var invoicePreview = Assert.Single(preview.PendingEntities, e => e.EntityName == "Invoice");
+        Assert.True(invoicePreview.HasService);
+        Assert.True(invoicePreview.HasApi);
+        Assert.Equal(["getAll", "find", "add"], invoicePreview.ServiceMethods);
+
+        // Apply honors CodeGen flags on disk
+        var applyRes = await client.PostAsJsonAsync(
+            $"/api/projects/{project.Id}/generate/apply",
+            new CodeGenApplyRequest(RunEfMigration: false));
+        applyRes.EnsureSuccessStatusCode();
+        var apply = (await applyRes.Content.ReadFromJsonAsync<CodeGenApplyResultDto>())!;
+        Assert.True(apply.Succeeded);
+
+        var projectsPath = Path.Combine(project.Path, "Acme.Studio");
+        Assert.False(File.Exists(Path.Combine(projectsPath, "Acme.Studio.Services", "LedgerService.cs")));
+        Assert.False(File.Exists(Path.Combine(projectsPath, "Acme.Studio.AppApi", "Controllers", "v1", "LedgersController.cs")));
+
+        var invoiceServicePath = Path.Combine(projectsPath, "Acme.Studio.Services", "InvoiceService.cs");
+        var invoiceControllerPath = Path.Combine(projectsPath, "Acme.Studio.AppApi", "Controllers", "v1", "InvoicesController.cs");
+        Assert.True(File.Exists(invoiceServicePath));
+        Assert.True(File.Exists(invoiceControllerPath));
+
+        var invoiceServiceText = File.ReadAllText(invoiceServicePath);
+        Assert.Contains("All(QueryViewModel query)", invoiceServiceText);
+        Assert.Contains("Find(long id)", invoiceServiceText);
+        Assert.Contains("Add(InvoiceModifyModel model)", invoiceServiceText);
+        Assert.DoesNotContain("Select(QueryViewModel query)", invoiceServiceText);
+        Assert.DoesNotContain("Update(InvoiceModifyModel model)", invoiceServiceText);
+        Assert.DoesNotContain("Delete(long id)", invoiceServiceText);
+
+        var invoiceControllerText = File.ReadAllText(invoiceControllerPath);
+        Assert.Contains("GetAll(", invoiceControllerText);
+        Assert.Contains("GetOne(", invoiceControllerText);
+        Assert.Contains("PostInvoice(", invoiceControllerText);
+        Assert.DoesNotContain("PutInvoice(", invoiceControllerText);
+        Assert.DoesNotContain("DeleteInvoice(", invoiceControllerText);
+
+        Assert.True(File.Exists(Path.Combine(projectsPath, "Acme.Studio.Services", "AuditNoteService.cs")));
+        Assert.False(File.Exists(Path.Combine(projectsPath, "Acme.Studio.AppApi", "Controllers", "v1", "AuditNotesController.cs")));
+    }
+
+    [Fact]
+    public void ResolveMigrationPaths_SupportsBothFlatAndLegacyNestedLayouts()
+    {
+        // Flat .slnx layout
+        var flatRoot = Path.Combine(_workDir, "FlatSolution");
+        Directory.CreateDirectory(Path.Combine(flatRoot, "FlatSolution.EntityFramework"));
+        Directory.CreateDirectory(Path.Combine(flatRoot, "FlatSolution.AppApi"));
+
+        var (flatProjectsPath, flatEfPath, flatApiPath) = EfMigrationRunner.ResolveMigrationPaths(flatRoot, "FlatSolution");
+        Assert.Equal(flatRoot, flatProjectsPath);
+        Assert.Equal(Path.Combine(flatRoot, "FlatSolution.EntityFramework"), flatEfPath);
+        Assert.Equal(Path.Combine(flatRoot, "FlatSolution.AppApi"), flatApiPath);
+
+        // Legacy nested layout
+        var nestedRoot = Path.Combine(_workDir, "NestedSolution");
+        Directory.CreateDirectory(Path.Combine(nestedRoot, "NestedSolution", "NestedSolution.EntityFramework"));
+        Directory.CreateDirectory(Path.Combine(nestedRoot, "NestedSolution", "NestedSolution.AppApi"));
+
+        var (nestedProjectsPath, nestedEfPath, nestedApiPath) = EfMigrationRunner.ResolveMigrationPaths(nestedRoot, "NestedSolution");
+        Assert.Equal(Path.Combine(nestedRoot, "NestedSolution"), nestedProjectsPath);
+        Assert.Equal(Path.Combine(nestedRoot, "NestedSolution", "NestedSolution.EntityFramework"), nestedEfPath);
+        Assert.Equal(Path.Combine(nestedRoot, "NestedSolution", "NestedSolution.AppApi"), nestedApiPath);
+    }
 }

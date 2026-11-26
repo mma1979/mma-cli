@@ -15,6 +15,7 @@ namespace Mma.Cli.Shared.Models
 
         public bool HasService { get; set; } = true;
         public bool HasApi { get; set; } = true;
+        public string? ServiceMethods { get; set; }
         public int? ProjectId { get; set; }
 
         public bool Applied { get; set; } = false;

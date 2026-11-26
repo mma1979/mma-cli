@@ -205,6 +205,42 @@ export const GenerateModal: React.FC<GenerateModalProps> = ({
                   </div>
                 </div>
 
+                {preview.pendingEntities.length > 0 && (
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800/80 overflow-hidden">
+                    {preview.pendingEntities.map((ent) => (
+                      <div
+                        key={ent.entityName}
+                        className="px-3 py-2 flex items-center justify-between gap-2 text-xs bg-white dark:bg-slate-900/40"
+                      >
+                        <div className="font-mono font-medium text-slate-800 dark:text-slate-200 truncate">
+                          {ent.entityName}{' '}
+                          <span className="text-slate-400 dark:text-slate-500">({ent.pkType})</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 text-[11px]">
+                          {ent.hasService ? (
+                            <span className="px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/70 dark:border-blue-800/60">
+                              Service ({ent.serviceMethods.length}/6)
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                              No Service
+                            </span>
+                          )}
+                          {ent.hasService && ent.hasApi ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60">
+                              API
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                              No API
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">

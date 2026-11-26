@@ -118,7 +118,7 @@ public class Program
             .GenerateEntityConfig()
             .DbContextMapping()
             .GenerateService()
-            .GenerateController(!args.Contains(Flags.ApiFlag));
+            .GenerateController();
 
         Output.Success("Entity files generated");
         return 0;

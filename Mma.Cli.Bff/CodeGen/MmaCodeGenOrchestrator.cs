@@ -9,7 +9,12 @@ using Mma.Cli.Shared.Models;
 
 namespace Mma.Cli.Bff.CodeGen;
 
-public sealed record PendingEntityDto(string EntityName, string PkType, bool HasApi);
+public sealed record PendingEntityDto(
+    string EntityName,
+    string PkType,
+    bool HasService,
+    bool HasApi,
+    IReadOnlyList<string> ServiceMethods);
 
 public sealed record PendingPropertyDto(string EntityName, string ColumnName, string DataType, bool Nullable);
 
@@ -72,9 +77,19 @@ public sealed class MmaCodeGenOrchestrator(CliDbContext dbContext, IEfMigrationR
         {
             if (!entity.Applied)
             {
-                pendingEntities.Add(new PendingEntityDto(entity.EntityName, entity.PkType, entity.HasApi));
-                var apiFlag = entity.HasApi ? string.Empty : " --no-api";
-                commands.Add($"mma g e {entity.EntityName} {entity.PkType} --mapper {mapper}{apiFlag}");
+                var options = EntityCodeGenOptions.FromServiceMethodsCsv(
+                    entity.HasService,
+                    entity.HasApi,
+                    entity.ServiceMethods);
+                pendingEntities.Add(new PendingEntityDto(
+                    entity.EntityName,
+                    entity.PkType,
+                    options.GenerateService,
+                    options.EffectiveGenerateApiController,
+                    options.GenerateService ? options.GetEnabledMethodNames() : []));
+                var extraFlags = options.ToCliFlags();
+                var suffix = extraFlags.Count > 0 ? $" {string.Join(" ", extraFlags)}" : string.Empty;
+                commands.Add($"mma g e {entity.EntityName} {entity.PkType} --mapper {mapper}{suffix}");
             }
 
             foreach (var row in entity.Rows.Where(r => !r.Applied && !r.IsForeignKey && !string.IsNullOrWhiteSpace(r.ColumnName)))
@@ -139,20 +154,22 @@ public sealed class MmaCodeGenOrchestrator(CliDbContext dbContext, IEfMigrationR
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
+                var options = EntityCodeGenOptions.FromServiceMethodsCsv(
+                    entity.HasService,
+                    entity.HasApi,
+                    entity.ServiceMethods);
                 var args = new List<string> { "g", "e", entity.EntityName, entity.PkType, Flags.MapperFlag, mapper };
-                if (!entity.HasApi)
-                {
-                    args.Add(Flags.ApiFlag);
-                }
+                args.AddRange(options.ToCliFlags());
 
                 EntityBuilder.New(args.ToArray(), project.Path)
+                    .WithCodeGenOptions(options)
                     .GenerateModels()
                     .GenerateValidator()
                     .GenerateEntity()
                     .GenerateEntityConfig()
                     .DbContextMapping()
                     .GenerateService()
-                    .GenerateController(entity.HasApi);
+                    .GenerateController();
 
                 entity.Applied = true;
                 await dbContext.SaveChangesAsync(cancellationToken);

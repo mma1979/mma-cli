@@ -88,7 +88,14 @@ public sealed partial class ProjectService(
 
         if (request.RunInitialMigration)
         {
-            await efMigrationRunner.AddMigrationAsync(solutionPath, name, "InitialMigration", cancellationToken);
+            var migrationResult = await efMigrationRunner.AddMigrationAsync(solutionPath, name, "InitialMigration", cancellationToken);
+            if (!migrationResult.Succeeded)
+            {
+                throw new MmaCliException(
+                    "ef_migration_failed",
+                    migrationResult.Error ?? "Initial EF Core migration failed.",
+                    exitCode: 1);
+            }
         }
 
         return ToSummaryDto(project);
@@ -146,6 +153,7 @@ public sealed partial class ProjectService(
                         PkType = string.IsNullOrWhiteSpace(legacyEntity.PkType) ? PkTypes.GUID : legacyEntity.PkType,
                         HasService = legacyEntity.HasService,
                         HasApi = legacyEntity.HasApi,
+                        ServiceMethods = legacyEntity.ServiceMethods,
                         Applied = legacyEntity.Applied,
                     };
 

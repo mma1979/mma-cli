@@ -1,14 +1,28 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Text;
+
+using Mma.Cli.Shared.Builders;
 
 namespace Mma.Cli.Shared.Templates.Mappster
 {
     public static class Service
     {
-        public const string Template = @"using $SolutionName.Core.Database.Tables;
+        public static string Template => Render(EntityCodeGenOptions.Default);
+
+        public static string Render(EntityCodeGenOptions options)
+        {
+            var sb = new StringBuilder();
+            sb.Append(Header);
+            if (options.GetAll) sb.Append(AllMethod);
+            if (options.Select) sb.Append(SelectMethod);
+            if (options.Find) sb.Append(FindMethods);
+            if (options.Add) sb.Append(AddMethod);
+            if (options.Update) sb.Append(UpdateMethod);
+            if (options.Delete) sb.Append(DeleteMethod);
+            sb.Append(Footer);
+            return sb.ToString();
+        }
+
+        private const string Header = @"using $SolutionName.Core.Database.Tables;
 using $SolutionName.Core.Models;
 using $SolutionName.EntityFramework;
 using $SolutionName.Services.Chache;
@@ -44,8 +58,9 @@ namespace $SolutionName.Services
             _logger = logger;
             _cacheService = cacheService;
         }
+";
 
-
+        private const string AllMethod = @"
 
         public async Task<ResultViewModel<List<$EntityNameReadModel>>> All(QueryViewModel query)
         {
@@ -109,7 +124,9 @@ namespace $SolutionName.Services
                 };
             }
         }
+";
 
+        private const string SelectMethod = @"
         public async Task<ResultViewModel<List<dynamic>>> Select(QueryViewModel query)
 {
 	var cacheKey = $""{CACHING_PREFIX}-select{query.GetHashCode()}"";
@@ -172,7 +189,9 @@ namespace $SolutionName.Services
 		};
 	}
 }
+";
 
+        private const string FindMethods = @"
         public async Task<ResultViewModel<$EntityNameModifyModel>> Find(Expression<Func<$EntityName, bool>> predicate)
         {
 			var cacheKey = $""{CACHING_PREFIX}{predicate.Body.GetHashCode()}"";
@@ -248,7 +267,9 @@ namespace $SolutionName.Services
                 };
             }
         }
+";
 
+        private const string AddMethod = @"
 
         public async Task<AcknowledgeViewModel> Add($EntityNameModifyModel dto)
         {
@@ -280,7 +301,9 @@ namespace $SolutionName.Services
                 };
             }
         }
+";
 
+        private const string UpdateMethod = @"
         public async Task<AcknowledgeViewModel> Update($EntityNameModifyModel dto)
         {
             try
@@ -325,7 +348,9 @@ namespace $SolutionName.Services
                 };
             }
         }
+";
 
+        private const string DeleteMethod = @"
         public async Task<AcknowledgeViewModel> Delete($PK id)
         {
             try
@@ -368,7 +393,9 @@ namespace $SolutionName.Services
                 };
             }
         }
+";
 
+        private const string Footer = @"
 
     }
 }";
