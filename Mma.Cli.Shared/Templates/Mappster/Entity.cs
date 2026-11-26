@@ -23,9 +23,6 @@ using System.Linq;
 
 namespace $SolutionName.Core.Database.Tables
 {
-    [AdaptTo(""[name]ReadModel"")]
-    [AdaptTo(""[name]ModifyModel"")]
-    [GenerateMapper]
     public class $EntityName : BaseEntity<$PK>
     {
         

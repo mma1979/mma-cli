@@ -51,7 +51,7 @@ namespace $SolutionName.Services
 
         public async Task<ResultViewModel<List<$EntityNameReadModel>>> All(QueryViewModel query)
         {
-			var cacheKey = $""{CACHING_PREFIX}{query.GetHashCode()}"";
+			var cacheKey = $""{CACHING_PREFIX}all:{query.PageNumber}:{query.PageSize}:{query.ShowAll}:{query.Order}:{query.Filter}"";
             try
             {
                 var cached = _cacheService.Get<ResultViewModel<List<$EntityNameReadModel>>>(cacheKey);
@@ -141,7 +141,7 @@ namespace $SolutionName.Services
 						   .Take(query.PageSize);
 
 				var count = await data.CountAsync();
-				var list = await page.Select($""new({query.Fields}"").ToDynamicListAsync();
+				var list = await page.Select($""new({query.Fields})"").ToDynamicListAsync();
 
 				var result = new ResultViewModel<List<dynamic>>
 				{
@@ -260,7 +260,7 @@ namespace $SolutionName.Services
                 var entity = await _context.$EntitySetName.AddAsync(record);
                 _ = await _context.SaveChangesAsync();
 
-                _cacheService.Clear(""{CACHING_PREFIX}*"");
+                _cacheService.Clear($""{CACHING_PREFIX}*"");
                 return new ()
                 {
 
@@ -305,7 +305,7 @@ namespace $SolutionName.Services
 
                 _ = await _context.SaveChangesAsync();
 
-                _cacheService.Clear(""{CACHING_PREFIX}*"");
+                _cacheService.Clear($""{CACHING_PREFIX}*"");
 
                 return new ()
                 {
@@ -348,7 +348,7 @@ namespace $SolutionName.Services
                 _context.Entry(entity).State = EntityState.Deleted;
                 _ = await _context.SaveChangesAsync();
 
-                _cacheService.Clear(""{CACHING_PREFIX}*"");
+                _cacheService.Clear($""{CACHING_PREFIX}*"");
 
                 return new ()
                 {
@@ -384,7 +384,6 @@ namespace $SolutionName.Services
         public void Dispose()
         {
             GC.SuppressFinalize(this);
-            GC.Collect();
         }
 
 

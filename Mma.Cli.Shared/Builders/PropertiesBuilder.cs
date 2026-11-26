@@ -93,7 +93,7 @@ namespace Mma.Cli.Shared.Builders
 
             void UpdateModifyModel()
             {
-                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ModifyModel.cs");
+                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", EntityName, $"{EntityName}ModifyModel.cs");
 
                 var lines = File.ReadAllLines(modelFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -110,7 +110,7 @@ namespace Mma.Cli.Shared.Builders
             void UpdateReadModel()
             {
 
-                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ReadModel.cs");
+                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", EntityName, $"{EntityName}ReadModel.cs");
 
                 var lines = File.ReadAllLines(modelFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -126,7 +126,7 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveFromModifiyModel()
             {
-                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ModifyModel.cs");
+                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", EntityName, $"{EntityName}ModifyModel.cs");
 
                 var lines = File.ReadAllLines(modelFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(property));
@@ -144,7 +144,7 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFromReadModel()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{EntityName}ReadModel.cs");
+                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", EntityName, $"{EntityName}ReadModel.cs");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(property));

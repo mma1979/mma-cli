@@ -76,11 +76,13 @@ namespace Mma.Cli.Shared.Builders
                 "mapster" => Mappers.Mapster,
                 _ => Mappers.AutoMapper
             };
-            var builder = new EntityBuilder(solutionPath);
-            builder.ComponentType = args[1];
-            builder.ComponentName = args[2];
-            builder.PkType = args.Length > 3 ? args[3] : PkTypes.GUID;
-            builder.Mapper = mapper;
+            var builder = new EntityBuilder(solutionPath)
+            {
+                ComponentType = args[1],
+                ComponentName = args[2],
+                PkType = args.Length > 3 ? args[3] : PkTypes.GUID,
+                Mapper = mapper
+            };
 
             (builder.SolutionName, builder.ProjectsPath) = BuildHelper.CheckSolutionPath(builder.SolutionPath);
 
@@ -95,7 +97,8 @@ namespace Mma.Cli.Shared.Builders
                 Mappers.Mapster => $"{ComponentName}ModifyModel.g.cs",
                 _ => $"{ComponentName}ModifyModel.cs"
             };
-            var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", fileName);
+            var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ComponentName, fileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
             using StreamWriter writer = new(path);
             writer.Write(
@@ -114,7 +117,8 @@ namespace Mma.Cli.Shared.Builders
                     Mappers.Mapster => $"{ComponentName}ReadModel.g.cs",
                     _ => $"{ComponentName}ReadModel.cs"
                 };
-                var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models",fileName);
+                var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ComponentName, fileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 using StreamWriter writer = new(path);
                 writer.Write(
                      (Mapper is Mappers.Mapster ? Templates.Mappster.ReadModel.Template : Templates.AutoMapper.ReadModel.Template)
@@ -185,6 +189,7 @@ namespace Mma.Cli.Shared.Builders
         public EntityBuilder GenerateValidator()
         {
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Validations", $"{ComponentName}Validator.cs");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
             using StreamWriter writer = new(path);
             writer.Write(
@@ -201,6 +206,7 @@ namespace Mma.Cli.Shared.Builders
         public EntityBuilder GenerateEntity()
         {
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Database", "Tables", $"{ComponentName}.cs");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
             var template = Mapper switch
             {
@@ -225,6 +231,7 @@ namespace Mma.Cli.Shared.Builders
         {
 
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.EntityFramework", "EntityConfigurations", $"{ComponentName}Config.cs");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
             var entitySetName = BuildHelper.GetSetName(ComponentName);
 
@@ -304,6 +311,7 @@ namespace Mma.Cli.Shared.Builders
         {
 
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.Services", $"{ComponentName}Service.cs");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
             var entitySetName = BuildHelper.GetSetName(ComponentName);
             var entityNameVar = $"{ComponentName[0].ToString().ToLower()}{ComponentName.AsSpan(1).ToString()}";
@@ -337,15 +345,16 @@ namespace Mma.Cli.Shared.Builders
             var entityNameVar = $"{ComponentName[0].ToString().ToLower()}{ComponentName.AsSpan(1).ToString()}";
 
             var path = Path.Combine(ProjectsPath, $"{SolutionName}.AppApi", "Controllers", "v1", $"{entitySetName}Controller.cs");
-
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
             using StreamWriter writer = new(path);
             writer.Write(
-               (Mapper is Mappers.Mapster? MappsterController.Template:Controller.Template)
-               .Replace("$SolutionName", SolutionName)
+               (Mapper is Mappers.Mapster ? MappsterController.Template : Controller.Template)
+                    .Replace("$SolutionName", SolutionName)
                     .Replace("$EntityName", ComponentName)
                     .Replace("$EntityVarName", entityNameVar)
                     .Replace("$EntitySetName", entitySetName)
+                    .Replace("$EntityResourceName", entitySetName.ToLowerInvariant())
                     .Replace("$PK", PkType)
             );
             writer.Flush();

@@ -27,12 +27,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using $SolutionName.AppApi.Infrastrcture.Attributes;
 
+using Asp.Versioning;
 using System.Security.Claims;
 
-namespace $SolutionName.AppApi.Controllers
+namespace $SolutionName.AppApi.Controllers.v1
 {
-	[Route(""api/[controller]"")]
+	[Route(""api/v{version:apiVersion}/[controller]"")]
+	[ApiVersion(1.0)]
 	[ApiController]
+	[Resource(""$EntityResourceName"")]
 	public class $EntitySetNameController : BaseController
 	{
 		private readonly $EntityNameService _$EntityVarNameService;
@@ -240,7 +243,7 @@ public async Task<IActionResult> GetAll([FromQuery] QueryViewModel query, Cancel
 		}
 
 		[HttpDelete(""{id}"")]
-		[RequiredPermission(""Update,Delete"")]
+		[RequiredPermission(""Delete"")]
 		public async Task<IActionResult> Delete$EntityName($PK id, CancellationToken cancellationToken)
 		{
 			if (cancellationToken.IsCancellationRequested)

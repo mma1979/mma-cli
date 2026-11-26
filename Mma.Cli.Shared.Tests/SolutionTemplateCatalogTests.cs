@@ -67,23 +67,23 @@ public sealed class SolutionTemplateCatalogTests : IDisposable
             "new", "Acme.Full",
             Flags.MapperFlag, "mapster",
             Flags.TemplateSourceFlag, "https://pkgs.example.com/v3/index.json",
-            Flags.TemplateVersionFlag, "10.0.0-preview.3"
+            Flags.TemplateVersionFlag, "10.0.0-preview.4"
         ]);
         Assert.Equal("Acme.Full", full.SolutionName);
         Assert.Equal(Mappers.Mapster, full.Mapper);
         Assert.Equal("https://pkgs.example.com/v3/index.json", full.TemplateSource);
-        Assert.Equal("10.0.0-preview.3", full.TemplateVersion);
+        Assert.Equal("10.0.0-preview.4", full.TemplateVersion);
     }
 
     [Fact]
     public void BuildInstallArguments_UsesLocalNupkg_WhenSourceFolderContainsPackage()
     {
-        var nupkgPath = Path.Combine(_tempDir, "Mma.Cli.Solutions.AutoMapper.10.0.0-preview.3.nupkg");
+        var nupkgPath = Path.Combine(_tempDir, "Mma.Cli.Solutions.AutoMapper.10.0.0-preview.4.nupkg");
         File.WriteAllText(nupkgPath, "fake-nupkg");
 
         var args = DotnetTemplateRunner.BuildInstallArguments(
             "Mma.Cli.Solutions.AutoMapper",
-            "10.0.0-preview.3",
+            "10.0.0-preview.4",
             _tempDir,
             force: true,
             customHivePath: Path.Combine(_tempDir, "hive"));
@@ -101,12 +101,12 @@ public sealed class SolutionTemplateCatalogTests : IDisposable
     {
         var args = DotnetTemplateRunner.BuildInstallArguments(
             "Mma.Cli.Solutions.Mapster",
-            "10.0.0-preview.3",
+            "10.0.0-preview.4",
             "https://api.nuget.org/v3/index.json",
             force: false);
 
         Assert.Equal(
-            ["new", "install", "Mma.Cli.Solutions.Mapster::10.0.0-preview.3", "--nuget-source", "https://api.nuget.org/v3/index.json"],
+            ["new", "install", "Mma.Cli.Solutions.Mapster::10.0.0-preview.4", "--nuget-source", "https://api.nuget.org/v3/index.json"],
             args);
     }
 

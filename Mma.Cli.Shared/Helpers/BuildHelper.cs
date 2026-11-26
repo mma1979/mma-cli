@@ -69,9 +69,28 @@ namespace Mma.Cli.Shared.Helpers
             }
 
             var solutionName = Path.GetFileNameWithoutExtension(sln[0]);
-            var projectsPath = Path.Combine(solutionPath, solutionName);
+            var projectsPath = ResolveProjectsPath(solutionPath, solutionName);
 
             return (solutionName, projectsPath);
+        }
+
+        public static string ResolveProjectsPath(string solutionPath, string solutionName)
+        {
+            // New 11-project .slnx flat layout: <solutionPath>/<SolutionName>.Core
+            if (Directory.Exists(Path.Combine(solutionPath, $"{solutionName}.Core"))
+                || Directory.Exists(Path.Combine(solutionPath, $"{solutionName}.AppApi")))
+            {
+                return solutionPath;
+            }
+
+            // Legacy nested layout: <solutionPath>/<SolutionName>/<SolutionName>.Core
+            var nested = Path.Combine(solutionPath, solutionName);
+            if (Directory.Exists(nested))
+            {
+                return nested;
+            }
+
+            return nested;
         }
         public static void Help(string version)
         {

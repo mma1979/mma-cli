@@ -4,7 +4,7 @@ namespace Mma.Cli.Shared.Solutions;
 
 public static class SolutionTemplateCatalog
 {
-    public const string DefaultTemplateVersion = "10.0.0-preview.1";
+    public const string DefaultTemplateVersion = "10.0.0-preview.4";
     public const string TemplateSourceEnvVar = "MMA_TEMPLATE_SOURCE";
     public const string TemplateVersionEnvVar = "MMA_TEMPLATE_VERSION";
 

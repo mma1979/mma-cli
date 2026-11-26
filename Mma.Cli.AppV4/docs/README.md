@@ -19,7 +19,7 @@
 
 ---
 
-## What's New in v10.0.0-preview.1
+## What's New in v10.0.0-preview.4
 
 - **.NET 10 Upgrade:** All CLI, shared, BFF, and test projects target `net10.0`.
 - **New MMA CLI Studio (React 19 + ASP.NET Core BFF):** Replaced the legacy Blazor UI with a fast, local-first React + TypeScript web studio served by an embedded ASP.NET Core BFF with per-session token authentication and SQLite persistence.

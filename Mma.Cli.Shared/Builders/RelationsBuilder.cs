@@ -87,7 +87,7 @@ namespace Mma.Cli.Shared.Builders
 
             void UpdateModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}ModifyModel.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ParentEntity, $"{ParentEntity}ModifyModel.cs");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -103,7 +103,7 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveFromModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}ModifyModel.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ParentEntity,$"{ParentEntity}ModifyModel.cs");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var navigation_line = lines.FirstOrDefault(l => l.Contains(navigation));
@@ -136,7 +136,7 @@ namespace Mma.Cli.Shared.Builders
 
             void UpdateModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ModifyModel.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ChiledEntity, $"{ChiledEntity}ModifyModel.cs");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -153,7 +153,7 @@ namespace Mma.Cli.Shared.Builders
             void UpdateReadDto()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ReadModel.cs");
+                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ChiledEntity, $"{ChiledEntity}ReadModel.cs");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
                 var index = lines.IndexOf(lines[^2]);
@@ -169,7 +169,7 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveFromModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ChiledEntity}ModifyModel.cs");
+                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ChiledEntity,$"{ChiledEntity}ModifyModel.cs");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(foreignKey));
@@ -187,7 +187,7 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFromReadDto()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", $"{ParentEntity}ReadModel.cs");
+                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ParentEntity, $"{ParentEntity}ReadModel.cs");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(foreignKey));

@@ -151,7 +151,7 @@ namespace Mma.Cli.Shared.Builders
                     exitCode: scaffoldResult.ExitCode == 0 ? 1 : scaffoldResult.ExitCode);
             }
 
-            ProjectsPath = Path.Combine(SolutionPath, SolutionName);
+            ProjectsPath = BuildHelper.ResolveProjectsPath(SolutionPath, SolutionName);
             return this;
         }
 

@@ -102,8 +102,8 @@ public sealed class SolutionAndEntityBuilderTests : IDisposable
 
         var projectsPath = Path.Combine(solutionPath, solutionName);
         var entityFile = Path.Combine(projectsPath, $"{solutionName}.Core", "Database", "Tables", "Product.cs");
-        var modifyModelFile = Path.Combine(projectsPath, $"{solutionName}.Core", "Models", "ProductModifyModel.cs");
-        var readModelFile = Path.Combine(projectsPath, $"{solutionName}.Core", "Models", "ProductReadModel.cs");
+        var modifyModelFile = Path.Combine(projectsPath, $"{solutionName}.Core", "Models", "Product", "ProductModifyModel.cs");
+        var readModelFile = Path.Combine(projectsPath, $"{solutionName}.Core", "Models", "Product", "ProductReadModel.cs");
 
         Assert.True(File.Exists(entityFile), $"Expected generated entity file at {entityFile}");
         Assert.True(File.Exists(modifyModelFile), $"Expected generated modify model at {modifyModelFile}");

@@ -49,7 +49,7 @@ namespace $SolutionName.Services
 
         public async Task<ResultViewModel<List<$EntityNameReadModel>>> All(QueryViewModel query)
         {
-			var cacheKey = $""{CACHING_PREFIX}{query.GetHashCode()}"";
+			var cacheKey = $""{CACHING_PREFIX}all:{query.PageNumber}:{query.PageSize}:{query.ShowAll}:{query.Order}:{query.Filter}"";
             try
             {
                 var cached = _cacheService.Get<ResultViewModel<List<$EntityNameReadModel>>>(cacheKey);
@@ -139,7 +139,7 @@ namespace $SolutionName.Services
 				   .Take(query.PageSize);
 
 		var count = await data.CountAsync();
-		var list = await page.Select($""new({query.Fields}"").ToDynamicListAsync();
+		var list = await page.Select($""new({query.Fields})"").ToDynamicListAsync();
 
 		var result = new ResultViewModel<List<dynamic>>
 		{
@@ -258,7 +258,7 @@ namespace $SolutionName.Services
                 var entity = await _context.$EntitySetName.AddAsync($EntityVarName);
                 _ = await _context.SaveChangesAsync();
 
-                _cacheService.Clear(""{CACHING_PREFIX}*"");
+                _cacheService.Clear($""{CACHING_PREFIX}*"");
                 return new ()
                 {
 
@@ -290,10 +290,10 @@ namespace $SolutionName.Services
                 {
                     var exp = new KeyNotFoundException($""item number {dto.Id} does not Exist"");
                     _logger.LogError(exp.Message, exp);
-                    return new ResultViewModel<$EntityNameModifyModel>
+                    return new AcknowledgeViewModel
                     {
                         IsSuccess = false,
-                        StatusCode = 500,
+                        StatusCode = 404,
                         Messages = { ResourcesKeys.ITEM_NOT_FOUND },
                     };
                 }
@@ -303,7 +303,7 @@ namespace $SolutionName.Services
 
                 _ = await _context.SaveChangesAsync();
 
-                _cacheService.Clear(""{CACHING_PREFIX}*"");
+                _cacheService.Clear($""{CACHING_PREFIX}*"");
 
                 return new ()
                 {
@@ -335,10 +335,10 @@ namespace $SolutionName.Services
                 {
                     var exp = new KeyNotFoundException($""item number {id} does not Exist"");
                     _logger.LogError(exp.Message, exp);
-                    return new ResultViewModel<$EntityNameModifyModel>
+                    return new AcknowledgeViewModel
                     {
                         IsSuccess = false,
-                        StatusCode = 500,
+                        StatusCode = 404,
                         Messages = { ResourcesKeys.ITEM_NOT_FOUND },
                     };
                 }
@@ -346,14 +346,13 @@ namespace $SolutionName.Services
                 _context.Entry(entity).State = EntityState.Deleted;
                 _ = await _context.SaveChangesAsync();
 
-                _cacheService.Clear(""{CACHING_PREFIX}*"");
+                _cacheService.Clear($""{CACHING_PREFIX}*"");
 
                 return new ()
                 {
                     IsSuccess = true,
                     StatusCode = 200,
-                    Messages = { ResourcesKeys.DATA_REMOVE_SUCCESS },
-                    Data = entity.Adapt<$EntityNameModifyModel>()
+                    Messages = { ResourcesKeys.DATA_REMOVE_SUCCESS }
                 };
 
             }
