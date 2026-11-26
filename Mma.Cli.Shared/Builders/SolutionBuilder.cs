@@ -104,20 +104,26 @@ namespace Mma.Cli.Shared.Builders
             var descriptor = SolutionTemplateCatalog.Resolve(Mapper);
             var resolvedSource = SolutionTemplateCatalog.ResolveTemplateSource(templateSource ?? TemplateSource);
             var explicitVersion = SolutionTemplateCatalog.ResolveTemplateVersion(templateVersion ?? TemplateVersion);
+            var targetVersion = explicitVersion ?? descriptor.DefaultVersion;
 
             var isInstalled = await templateRunner.IsTemplateInstalledAsync(descriptor.ShortName, cancellationToken);
-            var shouldInstall = !isInstalled || forceInstall || !string.IsNullOrWhiteSpace(explicitVersion);
+            var installedVersion = isInstalled
+                ? await templateRunner.GetInstalledPackageVersionAsync(descriptor.PackageId, cancellationToken)
+                : null;
+            var versionMismatch = isInstalled
+                && !string.IsNullOrWhiteSpace(targetVersion)
+                && !string.Equals(installedVersion, targetVersion, StringComparison.OrdinalIgnoreCase);
+            var shouldInstall = !isInstalled || versionMismatch || forceInstall || !string.IsNullOrWhiteSpace(explicitVersion);
 
             if (shouldInstall)
             {
-                var targetVersion = explicitVersion ?? descriptor.DefaultVersion;
                 Output.Warning($"Installing solution template '{descriptor.PackageId}' ({targetVersion})...");
 
                 var installResult = await templateRunner.InstallPackageAsync(
                     descriptor.PackageId,
                     targetVersion,
                     resolvedSource,
-                    force: forceInstall || !string.IsNullOrWhiteSpace(explicitVersion),
+                    force: forceInstall || versionMismatch || !string.IsNullOrWhiteSpace(explicitVersion),
                     cancellationToken);
 
                 if (!installResult.Succeeded)

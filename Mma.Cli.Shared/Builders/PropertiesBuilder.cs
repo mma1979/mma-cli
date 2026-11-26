@@ -93,10 +93,10 @@ namespace Mma.Cli.Shared.Builders
 
             void UpdateModifyModel()
             {
-                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", EntityName, $"{EntityName}ModifyModel.cs");
+                var modelFilePath = BuildHelper.ResolveModelFilePath(ProjectsPath, SolutionName, EntityName, "ModifyModel");
 
                 var lines = File.ReadAllLines(modelFilePath).ToList();
-                var index = lines.IndexOf(lines[^2]);
+                var index = Math.Max(0, lines.Count - 2);
 
                 lines.Insert(index, property);
 
@@ -110,10 +110,10 @@ namespace Mma.Cli.Shared.Builders
             void UpdateReadModel()
             {
 
-                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", EntityName, $"{EntityName}ReadModel.cs");
+                var modelFilePath = BuildHelper.ResolveModelFilePath(ProjectsPath, SolutionName, EntityName, "ReadModel");
 
                 var lines = File.ReadAllLines(modelFilePath).ToList();
-                var index = lines.IndexOf(lines[^2]);
+                var index = Math.Max(0, lines.Count - 2);
 
                 lines.Insert(index, property);
 
@@ -126,11 +126,15 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveFromModifiyModel()
             {
-                var modelFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", EntityName, $"{EntityName}ModifyModel.cs");
+                var modelFilePath = BuildHelper.ResolveModelFilePath(ProjectsPath, SolutionName, EntityName, "ModifyModel");
 
                 var lines = File.ReadAllLines(modelFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(property));
-                var index = lines.IndexOf(line);
+                var index = line is null ? -1 : lines.IndexOf(line);
+                if (index < 0)
+                {
+                    return;
+                }
 
                 lines.RemoveAt(index);
 
@@ -144,11 +148,15 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFromReadModel()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", EntityName, $"{EntityName}ReadModel.cs");
+                var readDtoFilePath = BuildHelper.ResolveModelFilePath(ProjectsPath, SolutionName, EntityName, "ReadModel");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(property));
-                var index = lines.IndexOf(line);
+                var index = line is null ? -1 : lines.IndexOf(line);
+                if (index < 0)
+                {
+                    return;
+                }
 
                 lines.RemoveAt(index);
 
@@ -179,7 +187,11 @@ namespace Mma.Cli.Shared.Builders
             var property = BuildProperty(true);
             var filePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Database", "Tables", $"{EntityName}.cs");
 
-            var assignation = $"{PropertyName} = dto.{PropertyName};";
+            string BuildAssignation(IEnumerable<string> lines, string signaturePrefix)
+            {
+                var paramName = BuildHelper.DetectModelParameterName(lines, signaturePrefix);
+                return $"{PropertyName} = {paramName}.{PropertyName};";
+            }
 
             void UpdateProps()
             {
@@ -198,10 +210,11 @@ namespace Mma.Cli.Shared.Builders
             void UpdatePublicConstractor()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"public {EntityName}("));
+                var signaturePrefix = $"public {EntityName}(";
+                var line = lines.First(l => l.Contains(signaturePrefix));
                 var index = lines.IndexOf(line) + 10;
 
-                lines.Insert(index, assignation);
+                lines.Insert(index, BuildAssignation(lines, signaturePrefix));
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -212,10 +225,11 @@ namespace Mma.Cli.Shared.Builders
             void UpdateFunction()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"public {EntityName} Update("));
+                var signaturePrefix = $"public {EntityName} Update(";
+                var line = lines.First(l => l.Contains(signaturePrefix));
                 var index = lines.IndexOf(line) + 10;
 
-                lines.Insert(index, assignation);
+                lines.Insert(index, BuildAssignation(lines, signaturePrefix));
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -241,9 +255,15 @@ namespace Mma.Cli.Shared.Builders
             void RemovePublicConstractor()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(assignation));
-                var index = lines.IndexOf(line);
+                var assignation = BuildAssignation(lines, $"public {EntityName}(");
+                var line = lines.FirstOrDefault(l => l.Contains(assignation))
+                    ?? lines.FirstOrDefault(l => l.Contains($"{PropertyName} = dto.{PropertyName};"));
+                if (line is null)
+                {
+                    return;
+                }
 
+                var index = lines.IndexOf(line);
                 lines.RemoveAt(index);
 
                 using StreamWriter writer = new(filePath);
@@ -255,9 +275,15 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFunction()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(assignation));
-                var index = lines.IndexOf(line);
+                var assignation = BuildAssignation(lines, $"public {EntityName} Update(");
+                var line = lines.FirstOrDefault(l => l.Contains(assignation))
+                    ?? lines.FirstOrDefault(l => l.Contains($"{PropertyName} = dto.{PropertyName};"));
+                if (line is null)
+                {
+                    return;
+                }
 
+                var index = lines.IndexOf(line);
                 lines.RemoveAt(index);
 
                 using StreamWriter writer = new(filePath);

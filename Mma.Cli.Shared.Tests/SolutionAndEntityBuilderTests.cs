@@ -117,6 +117,79 @@ public sealed class SolutionAndEntityBuilderTests : IDisposable
 
         var entityContent = File.ReadAllText(entityFile);
         Assert.Contains("Title", entityContent);
+        Assert.Contains("Title = model.Title;", entityContent);
+    }
+
+    [Fact]
+    public async Task GenerateRelation_SupportsNestedAndFlatModelLayouts_AndRemoveUpdatesChildReadModel()
+    {
+        const string solutionName = "Acme.Contacts";
+        var originalCwd = Directory.GetCurrentDirectory();
+        var solutionPath = Path.Combine(_tempRoot, solutionName);
+        var fakeRunner = new FakeTemplateRunner();
+
+        try
+        {
+            Directory.SetCurrentDirectory(_tempRoot);
+
+            var builder = SolutionBuilder.New(solutionName, Mappers.AutoMapper)
+                .CreateSolutionDirectory();
+            await builder.ScaffoldFromTemplateAsync(fakeRunner);
+            builder.CreateMmaFolder();
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalCwd);
+        }
+
+        foreach (var entityName in new[] { "Contact", "ContactType" })
+        {
+            EntityBuilder.New(["g", "e", entityName, PkTypes.GUID, Flags.MapperFlag, Mappers.AutoMapper], solutionPath)
+                .GenerateModels()
+                .GenerateValidator()
+                .GenerateEntity()
+                .GenerateEntityConfig()
+                .DbContextMapping()
+                .GenerateService()
+                .GenerateController(true);
+        }
+
+        // Simulate a flat Models/ layout (like existing solutions created before nested Models/<Entity>/)
+        var modelsRoot = Path.Combine(solutionPath, solutionName, $"{solutionName}.Core", "Models");
+        var flatContactModify = Path.Combine(modelsRoot, "ContactModifyModel.cs");
+        var flatContactRead = Path.Combine(modelsRoot, "ContactReadModel.cs");
+        File.Move(Path.Combine(modelsRoot, "Contact", "ContactModifyModel.cs"), flatContactModify);
+        File.Move(Path.Combine(modelsRoot, "Contact", "ContactReadModel.cs"), flatContactRead);
+        Directory.Delete(Path.Combine(modelsRoot, "Contact"));
+
+        var relArgs = new[] { "g", "r", "Contact", "ContactType", "ContactId", PkTypes.GUID };
+        RelationsBuilder.New(relArgs, solutionPath)
+            .UpdateParentDtos()
+            .UpdateChildDtos()
+            .UpdateParentEntity()
+            .UpdateChildEntity()
+            .UpdateParentEntityConfig();
+
+        Assert.Contains("List<ContactType>", File.ReadAllText(flatContactModify));
+
+        var childModify = Path.Combine(modelsRoot, "ContactType", "ContactTypeModifyModel.cs");
+        var childRead = Path.Combine(modelsRoot, "ContactType", "ContactTypeReadModel.cs");
+        var childEntity = Path.Combine(solutionPath, solutionName, $"{solutionName}.Core", "Database", "Tables", "ContactType.cs");
+        Assert.Contains("ContactId", File.ReadAllText(childModify));
+        Assert.Contains("ContactId", File.ReadAllText(childRead));
+        Assert.Contains("ContactId = model.ContactId;", File.ReadAllText(childEntity));
+
+        // Verify --remove cleans up child's ReadModel (and not parent's ReadModel)
+        var removeArgs = new[] { "g", "r", "Contact", "ContactType", "ContactId", PkTypes.GUID, Flags.RemoveFlag };
+        RelationsBuilder.New(removeArgs, solutionPath)
+            .UpdateParentDtos()
+            .UpdateChildDtos()
+            .UpdateParentEntity()
+            .UpdateChildEntity()
+            .UpdateParentEntityConfig();
+
+        Assert.DoesNotContain("ContactId", File.ReadAllText(childRead));
+        Assert.DoesNotContain("List<ContactType>", File.ReadAllText(flatContactModify));
     }
 
     [Fact]

@@ -7,6 +7,9 @@ internal sealed class FakeDotnetTemplateRunner : IDotnetTemplateRunner
     public Task<bool> IsTemplateInstalledAsync(string shortName, CancellationToken cancellationToken = default) =>
         Task.FromResult(true);
 
+    public Task<string?> GetInstalledPackageVersionAsync(string packageId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<string?>(SolutionTemplateCatalog.DefaultTemplateVersion);
+
     public Task<TemplateCommandResult> InstallPackageAsync(
         string packageId,
         string? version = null,

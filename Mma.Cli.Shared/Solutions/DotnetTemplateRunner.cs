@@ -32,6 +32,64 @@ public sealed class DotnetTemplateRunner : IDotnetTemplateRunner
         return result.StdOut.Contains(shortName, StringComparison.OrdinalIgnoreCase);
     }
 
+    public async Task<string?> GetInstalledPackageVersionAsync(
+        string packageId,
+        CancellationToken cancellationToken = default)
+    {
+        var args = new List<string> { "new", "uninstall" };
+        AppendCustomHive(args);
+
+        var result = await ExecuteDotnetAsync(args, cancellationToken);
+        if (!result.Succeeded)
+        {
+            return null;
+        }
+
+        return ParseInstalledPackageVersion(result.StdOut, packageId);
+    }
+
+    public static string? ParseInstalledPackageVersion(string stdout, string packageId)
+    {
+        if (string.IsNullOrWhiteSpace(stdout) || string.IsNullOrWhiteSpace(packageId))
+        {
+            return null;
+        }
+
+        var lines = stdout.Split(["\r\n", "\n"], StringSplitOptions.None);
+        var inMatchingPackage = false;
+
+        foreach (var rawLine in lines)
+        {
+            var trimmed = rawLine.Trim();
+            var normalizedHeader = trimmed.TrimStart('>').Trim();
+
+            if (string.Equals(normalizedHeader, packageId, StringComparison.OrdinalIgnoreCase))
+            {
+                inMatchingPackage = true;
+                continue;
+            }
+
+            if (!inMatchingPackage)
+            {
+                continue;
+            }
+
+            if (trimmed.StartsWith("Version:", StringComparison.OrdinalIgnoreCase))
+            {
+                var version = trimmed["Version:".Length..].Trim();
+                return string.IsNullOrWhiteSpace(version) ? null : version;
+            }
+
+            if (trimmed.StartsWith(">", StringComparison.Ordinal)
+                && !normalizedHeader.StartsWith("dotnet new uninstall", StringComparison.OrdinalIgnoreCase))
+            {
+                inMatchingPackage = false;
+            }
+        }
+
+        return null;
+    }
+
     public async Task<TemplateCommandResult> InstallPackageAsync(
         string packageId,
         string? version = null,

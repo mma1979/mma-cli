@@ -6,6 +6,11 @@ public interface IDotnetTemplateRunner
         string shortName,
         CancellationToken cancellationToken = default);
 
+    Task<string?> GetInstalledPackageVersionAsync(
+        string packageId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<string?>(null);
+
     Task<TemplateCommandResult> InstallPackageAsync(
         string packageId,
         string? version = null,

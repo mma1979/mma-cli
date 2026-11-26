@@ -131,6 +131,88 @@ public sealed class MmaCodeGenOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task PreviewAndApply_GeneratesRelationBetweenEntities_AndMarksApplied()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        var createRes = await client.PostAsJsonAsync(
+            "/api/projects",
+            new CreateProjectRequest("Acme.Crm", _workDir, "AutoMapper"));
+        createRes.EnsureSuccessStatusCode();
+        var project = (await createRes.Content.ReadFromJsonAsync<ProjectSummaryDto>())!;
+
+        var schema = new SchemaModelDto(
+            Id: $"project-{project.Id}",
+            Name: project.Name,
+            Engine: "mssql",
+            Description: "",
+            UpdatedAt: DateTime.UtcNow.ToString("O"),
+            Tables:
+            [
+                new SchemaTableDto(
+                    Id: "t_contact",
+                    Name: "Contact",
+                    Schema: "dbo",
+                    StorageEngine: null,
+                    Charset: null,
+                    CodeGen: new TableCodeGenConfigDto(true, null, true),
+                    Color: "emerald",
+                    Comment: "",
+                    X: 100,
+                    Y: 100,
+                    Columns:
+                    [
+                        new SchemaColumnDto("c_contact_id", "Id", "uniqueidentifier", true, false, true, false, "", "", ""),
+                    ]),
+                new SchemaTableDto(
+                    Id: "t_contact_type",
+                    Name: "ContactType",
+                    Schema: "dbo",
+                    StorageEngine: null,
+                    Charset: null,
+                    CodeGen: new TableCodeGenConfigDto(true, null, true),
+                    Color: "blue",
+                    Comment: "",
+                    X: 400,
+                    Y: 100,
+                    Columns:
+                    [
+                        new SchemaColumnDto("c_type_id", "Id", "uniqueidentifier", true, false, true, false, "", "", ""),
+                    ]),
+            ],
+            Relations:
+            [
+                new SchemaRelationDto(
+                    Id: "r_contact_type",
+                    Name: "Contact -> ContactType",
+                    SourceTableId: "t_contact",
+                    SourceColumnId: "c_contact_id",
+                    TargetTableId: "t_contact_type",
+                    TargetColumnId: "c_type_id",
+                    SourceColumnIds: null,
+                    TargetColumnIds: null,
+                    Cardinality: "1:N",
+                    OnDelete: "CASCADE",
+                    OnUpdate: "NO ACTION"),
+            ]);
+
+        var putRes = await client.PutAsJsonAsync($"/api/projects/{project.Id}/schema", schema);
+        putRes.EnsureSuccessStatusCode();
+
+        var applyRes = await client.PostAsJsonAsync(
+            $"/api/projects/{project.Id}/generate/apply",
+            new CodeGenApplyRequest(RunEfMigration: false));
+        Assert.Equal(HttpStatusCode.OK, applyRes.StatusCode);
+
+        var apply = await applyRes.Content.ReadFromJsonAsync<CodeGenApplyResultDto>();
+        Assert.NotNull(apply);
+        Assert.True(apply!.Succeeded, string.Join("; ", apply.Steps.Select(s => $"{s.Kind}:{s.Target}:{s.Succeeded}:{s.Message}")));
+        Assert.Equal(0, apply.SyncState.PendingRelations);
+        Assert.Contains(apply.Steps, s => s.Kind == "relation" && s.Succeeded);
+    }
+
+    [Fact]
     public void FilterMmaSystemObjects_RemovesIdentityTablesAndAuditColumns()
     {
         var raw = new IntrospectionResult(

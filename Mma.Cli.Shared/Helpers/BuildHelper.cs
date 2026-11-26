@@ -92,6 +92,54 @@ namespace Mma.Cli.Shared.Helpers
 
             return nested;
         }
+
+        public static string ResolveModelFilePath(string projectsPath, string solutionName, string entityName, string modelSuffix)
+        {
+            var modelsRoot = Path.Combine(projectsPath, $"{solutionName}.Core", "Models");
+            var candidates = new List<string>
+            {
+                Path.Combine(modelsRoot, entityName, $"{entityName}{modelSuffix}.cs"),
+                Path.Combine(modelsRoot, entityName, $"{entityName}{modelSuffix}.g.cs"),
+                Path.Combine(modelsRoot, $"{entityName}{modelSuffix}.cs"),
+                Path.Combine(modelsRoot, $"{entityName}{modelSuffix}.g.cs"),
+            };
+
+            if (string.Equals(modelSuffix, "ModifyModel", StringComparison.OrdinalIgnoreCase))
+            {
+                candidates.Add(Path.Combine(modelsRoot, entityName, $"{entityName}Dto.cs"));
+                candidates.Add(Path.Combine(modelsRoot, $"{entityName}Dto.cs"));
+            }
+
+            foreach (var candidate in candidates)
+            {
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return candidates[0];
+        }
+
+        public static string DetectModelParameterName(IEnumerable<string> lines, string signaturePrefix)
+        {
+            var signatureLine = lines.FirstOrDefault(l => l.Contains(signaturePrefix, StringComparison.Ordinal));
+            if (signatureLine is null)
+            {
+                return "model";
+            }
+
+            var openParen = signatureLine.IndexOf('(');
+            var closeParen = signatureLine.IndexOf(')', openParen + 1);
+            if (openParen < 0 || closeParen <= openParen)
+            {
+                return "model";
+            }
+
+            var parameterList = signatureLine[(openParen + 1)..closeParen].Trim();
+            var parts = parameterList.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length >= 2 ? parts[^1].Trim() : "model";
+        }
         public static void Help(string version)
         {
 

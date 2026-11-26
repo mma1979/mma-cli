@@ -87,10 +87,10 @@ namespace Mma.Cli.Shared.Builders
 
             void UpdateModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ParentEntity, $"{ParentEntity}ModifyModel.cs");
+                var dtoFilePath = BuildHelper.ResolveModelFilePath(ProjectsPath, SolutionName, ParentEntity, "ModifyModel");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
-                var index = lines.IndexOf(lines[^2]);
+                var index = Math.Max(0, lines.Count - 2);
 
                 lines.Insert(index, navigation);
 
@@ -103,11 +103,15 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveFromModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ParentEntity,$"{ParentEntity}ModifyModel.cs");
+                var dtoFilePath = BuildHelper.ResolveModelFilePath(ProjectsPath, SolutionName, ParentEntity, "ModifyModel");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var navigation_line = lines.FirstOrDefault(l => l.Contains(navigation));
-                var navigation_index = lines.IndexOf(navigation_line);
+                var navigation_index = navigation_line is null ? -1 : lines.IndexOf(navigation_line);
+                if (navigation_index < 0)
+                {
+                    return;
+                }
 
                 lines.RemoveAt(navigation_index);
 
@@ -136,10 +140,10 @@ namespace Mma.Cli.Shared.Builders
 
             void UpdateModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ChiledEntity, $"{ChiledEntity}ModifyModel.cs");
+                var dtoFilePath = BuildHelper.ResolveModelFilePath(ProjectsPath, SolutionName, ChiledEntity, "ModifyModel");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
-                var index = lines.IndexOf(lines[^2]);
+                var index = Math.Max(0, lines.Count - 2);
 
                 lines.Insert(index, navigation);
                 lines.Insert(index, foreignKey);
@@ -153,10 +157,10 @@ namespace Mma.Cli.Shared.Builders
             void UpdateReadDto()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ChiledEntity, $"{ChiledEntity}ReadModel.cs");
+                var readDtoFilePath = BuildHelper.ResolveModelFilePath(ProjectsPath, SolutionName, ChiledEntity, "ReadModel");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
-                var index = lines.IndexOf(lines[^2]);
+                var index = Math.Max(0, lines.Count - 2);
 
                 lines.Insert(index, foreignKey);
 
@@ -169,14 +173,17 @@ namespace Mma.Cli.Shared.Builders
 
             void RemoveFromModifiyDto()
             {
-                var dtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ChiledEntity,$"{ChiledEntity}ModifyModel.cs");
+                var dtoFilePath = BuildHelper.ResolveModelFilePath(ProjectsPath, SolutionName, ChiledEntity, "ModifyModel");
 
                 var lines = File.ReadAllLines(dtoFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(foreignKey));
-                var index = lines.IndexOf(line);
+                var index = line is null ? -1 : lines.IndexOf(line);
+                if (index < 0)
+                {
+                    return;
+                }
 
-
-                lines.RemoveRange(index, 2);
+                lines.RemoveRange(index, Math.Min(2, lines.Count - index));
 
                 using StreamWriter writer = new(dtoFilePath);
                 writer.Write(string.Join('\n', lines));
@@ -187,11 +194,15 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFromReadDto()
             {
 
-                var readDtoFilePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Models", ParentEntity, $"{ParentEntity}ReadModel.cs");
+                var readDtoFilePath = BuildHelper.ResolveModelFilePath(ProjectsPath, SolutionName, ChiledEntity, "ReadModel");
 
                 var lines = File.ReadAllLines(readDtoFilePath).ToList();
                 var line = lines.FirstOrDefault(l => l.Contains(foreignKey));
-                var index = lines.IndexOf(line);
+                var index = line is null ? -1 : lines.IndexOf(line);
+                if (index < 0)
+                {
+                    return;
+                }
 
                 lines.RemoveAt(index);
 
@@ -335,7 +346,11 @@ namespace Mma.Cli.Shared.Builders
 
             var filePath = Path.Combine(ProjectsPath, $"{SolutionName}.Core", "Database", "Tables", $"{ChiledEntity}.cs");
 
-            var assignation = $"{ForeignKey} = dto.{ForeignKey};";
+            string BuildAssignation(IEnumerable<string> lines, string signaturePrefix)
+            {
+                var paramName = BuildHelper.DetectModelParameterName(lines, signaturePrefix);
+                return $"{ForeignKey} = {paramName}.{ForeignKey};";
+            }
 
             void UpdateProperties()
             {
@@ -357,10 +372,11 @@ namespace Mma.Cli.Shared.Builders
 
 
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"public {ChiledEntity}("));
+                var signaturePrefix = $"public {ChiledEntity}(";
+                var line = lines.First(l => l.Contains(signaturePrefix));
                 var index = lines.IndexOf(line) + 10;
 
-                lines.Insert(index, assignation);
+                lines.Insert(index, BuildAssignation(lines, signaturePrefix));
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -371,10 +387,11 @@ namespace Mma.Cli.Shared.Builders
             void UpdateFunction()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains($"public {ChiledEntity} Update("));
+                var signaturePrefix = $"public {ChiledEntity} Update(";
+                var line = lines.First(l => l.Contains(signaturePrefix));
                 var index = lines.IndexOf(line) + 10;
 
-                lines.Insert(index, assignation);
+                lines.Insert(index, BuildAssignation(lines, signaturePrefix));
 
                 using StreamWriter writer = new(filePath);
                 writer.Write(string.Join('\n', lines));
@@ -401,9 +418,15 @@ namespace Mma.Cli.Shared.Builders
             void RemovePublicConstractor()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(assignation));
-                var index = lines.IndexOf(line);
+                var assignation = BuildAssignation(lines, $"public {ChiledEntity}(");
+                var line = lines.FirstOrDefault(l => l.Contains(assignation))
+                    ?? lines.FirstOrDefault(l => l.Contains($"{ForeignKey} = dto.{ForeignKey};"));
+                if (line is null)
+                {
+                    return;
+                }
 
+                var index = lines.IndexOf(line);
                 lines.RemoveAt(index);
 
                 using StreamWriter writer = new(filePath);
@@ -415,9 +438,15 @@ namespace Mma.Cli.Shared.Builders
             void RemoveFunction()
             {
                 var lines = File.ReadAllLines(filePath).ToList();
-                var line = lines.First(l => l.Contains(assignation));
-                var index = lines.IndexOf(line);
+                var assignation = BuildAssignation(lines, $"public {ChiledEntity} Update(");
+                var line = lines.FirstOrDefault(l => l.Contains(assignation))
+                    ?? lines.FirstOrDefault(l => l.Contains($"{ForeignKey} = dto.{ForeignKey};"));
+                if (line is null)
+                {
+                    return;
+                }
 
+                var index = lines.IndexOf(line);
                 lines.RemoveAt(index);
 
                 using StreamWriter writer = new(filePath);

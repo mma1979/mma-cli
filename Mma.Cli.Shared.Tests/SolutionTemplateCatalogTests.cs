@@ -138,6 +138,88 @@ public sealed class SolutionTemplateCatalogTests : IDisposable
         Assert.Contains(SolutionTemplateCatalog.TemplateSourceEnvVar, ex.Message);
     }
 
+    [Fact]
+    public void ParseInstalledPackageVersion_ExtractsVersionFromDotnetNewUninstallOutput()
+    {
+        const string sampleOutput = """
+            Currently installed items:
+            >    Mma.Cli.Solutions.AutoMapper
+                    Version: 10.0.0-preview.1
+                    Details:
+                       Author: MMA
+            >          dotnet new uninstall Mma.Cli.Solutions.AutoMapper
+
+            >    Mma.Cli.Solutions.Mapster
+                    Version: 10.0.0-preview.4
+                    Details:
+                       Author: MMA
+            >          dotnet new uninstall Mma.Cli.Solutions.Mapster
+            """;
+
+        Assert.Equal("10.0.0-preview.1", DotnetTemplateRunner.ParseInstalledPackageVersion(sampleOutput, "Mma.Cli.Solutions.AutoMapper"));
+        Assert.Equal("10.0.0-preview.4", DotnetTemplateRunner.ParseInstalledPackageVersion(sampleOutput, "Mma.Cli.Solutions.Mapster"));
+        Assert.Null(DotnetTemplateRunner.ParseInstalledPackageVersion(sampleOutput, "NonExistent.Package"));
+    }
+
+    [Fact]
+    public async Task ScaffoldFromTemplateAsync_UpgradesWithForce_WhenOlderVersionIsInstalled()
+    {
+        var runner = new VersionTrackingRunner(installedVersion: "10.0.0-preview.1");
+        var builder = SolutionBuilder.New("Acme.Upgrade", Mappers.AutoMapper)
+            .CreateSolutionDirectory(_tempDir);
+
+        await builder.ScaffoldFromTemplateAsync(runner);
+
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.Equal(SolutionTemplateCatalog.DefaultTemplateVersion, runner.LastInstalledVersion);
+        Assert.True(runner.LastInstallForce);
+    }
+
+    [Fact]
+    public async Task ScaffoldFromTemplateAsync_SkipsInstall_WhenDefaultVersionAlreadyInstalled()
+    {
+        var runner = new VersionTrackingRunner(installedVersion: SolutionTemplateCatalog.DefaultTemplateVersion);
+        var builder = SolutionBuilder.New("Acme.Current", Mappers.AutoMapper)
+            .CreateSolutionDirectory(_tempDir);
+
+        await builder.ScaffoldFromTemplateAsync(runner);
+
+        Assert.Equal(0, runner.InstallCalls);
+    }
+
+    private sealed class VersionTrackingRunner(string installedVersion) : IDotnetTemplateRunner
+    {
+        public int InstallCalls { get; private set; }
+        public string? LastInstalledVersion { get; private set; }
+        public bool LastInstallForce { get; private set; }
+
+        public Task<bool> IsTemplateInstalledAsync(string shortName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+
+        public Task<string?> GetInstalledPackageVersionAsync(string packageId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(installedVersion);
+
+        public Task<TemplateCommandResult> InstallPackageAsync(
+            string packageId,
+            string? version = null,
+            string? nugetSource = null,
+            bool force = false,
+            CancellationToken cancellationToken = default)
+        {
+            InstallCalls++;
+            LastInstalledVersion = version;
+            LastInstallForce = force;
+            return Task.FromResult(new TemplateCommandResult(true, "Installed", "", 0));
+        }
+
+        public Task<TemplateCommandResult> InstantiateAsync(
+            string shortName,
+            string solutionName,
+            string outputDirectory,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new TemplateCommandResult(true, "Created", "", 0));
+    }
+
     private sealed class FailingInstallRunner : IDotnetTemplateRunner
     {
         public Task<bool> IsTemplateInstalledAsync(string shortName, CancellationToken cancellationToken = default) =>
